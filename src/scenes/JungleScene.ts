@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { Player } from "../entities/Player";
+import { clampMoveSpeed, loadMoveSpeed, saveMoveSpeed } from "../settings";
 
 const MAP_TILES_X = 40;
 const MAP_TILES_Y = 30;
@@ -8,6 +9,7 @@ const TILE = 32;
 export class JungleScene extends Phaser.Scene {
   private player!: Player;
   private goalText!: Phaser.GameObjects.Text;
+  private speedText!: Phaser.GameObjects.Text;
   private foundMap = false;
 
   constructor() {
@@ -27,7 +29,7 @@ export class JungleScene extends Phaser.Scene {
     const obstacles = this.physics.add.staticGroup();
     this.placeFoliage(obstacles, worldW, worldH);
 
-    this.player = new Player(this, 4 * TILE, 4 * TILE);
+    this.player = new Player(this, 4 * TILE, 4 * TILE, loadMoveSpeed());
     this.physics.add.collider(this.player.sprite, obstacles);
 
     const mapScrap = this.physics.add.staticImage(worldW - 5 * TILE, worldH - 5 * TILE, "mapScrap");
@@ -60,8 +62,8 @@ export class JungleScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(100);
 
-    this.add
-      .text(16, 44, "Shift = run", {
+    this.speedText = this.add
+      .text(16, 44, this.speedHudLabel(), {
         fontFamily: "Palatino Linotype, Palatino, Georgia, serif",
         fontSize: "13px",
         color: "#9bb39b",
@@ -70,10 +72,36 @@ export class JungleScene extends Phaser.Scene {
       })
       .setScrollFactor(0)
       .setDepth(100);
+
+    this.add
+      .text(16, 72, "Shift = run · [ / ] change speed", {
+        fontFamily: "Palatino Linotype, Palatino, Georgia, serif",
+        fontSize: "12px",
+        color: "#7f947f",
+        backgroundColor: "#0b151099",
+        padding: { x: 8, y: 4 },
+      })
+      .setScrollFactor(0)
+      .setDepth(100);
+
+    if (this.input.keyboard) {
+      this.input.keyboard.on("keydown-OPEN_BRACKET", () => this.adjustSpeed(-1));
+      this.input.keyboard.on("keydown-CLOSED_BRACKET", () => this.adjustSpeed(1));
+    }
   }
 
   update(): void {
     this.player.update();
+  }
+
+  private speedHudLabel(): string {
+    return `Speed ${this.player.getMoveSpeedLevel()} / 10`;
+  }
+
+  private adjustSpeed(delta: number): void {
+    const next = saveMoveSpeed(clampMoveSpeed(this.player.getMoveSpeedLevel() + delta));
+    this.player.setMoveSpeedLevel(next);
+    this.speedText.setText(this.speedHudLabel());
   }
 
   private drawGround(worldW: number, worldH: number): void {

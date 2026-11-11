@@ -1,7 +1,5 @@
 import Phaser from "phaser";
-
-const WALK_SPEED = 140;
-const RUN_SPEED = 220;
+import { loadMoveSpeed, runSpeedFor, walkSpeedFor } from "../settings";
 
 export class Player {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -13,8 +11,10 @@ export class Player {
     D: Phaser.Input.Keyboard.Key;
   };
   private shift: Phaser.Input.Keyboard.Key;
+  private moveSpeedLevel: number;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, moveSpeedLevel = loadMoveSpeed()) {
+    this.moveSpeedLevel = moveSpeedLevel;
     this.sprite = scene.physics.add.sprite(x, y, "player");
     this.sprite.setCollideWorldBounds(true);
     this.sprite.setDepth(10);
@@ -35,13 +35,23 @@ export class Player {
     this.shift = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
   }
 
+  getMoveSpeedLevel(): number {
+    return this.moveSpeedLevel;
+  }
+
+  setMoveSpeedLevel(level: number): void {
+    this.moveSpeedLevel = level;
+  }
+
   update(): void {
     const left = this.cursors.left.isDown || this.wasd.A.isDown;
     const right = this.cursors.right.isDown || this.wasd.D.isDown;
     const up = this.cursors.up.isDown || this.wasd.W.isDown;
     const down = this.cursors.down.isDown || this.wasd.S.isDown;
     const running = this.shift.isDown;
-    const speed = running ? RUN_SPEED : WALK_SPEED;
+    const speed = running
+      ? runSpeedFor(this.moveSpeedLevel)
+      : walkSpeedFor(this.moveSpeedLevel);
 
     let vx = 0;
     let vy = 0;

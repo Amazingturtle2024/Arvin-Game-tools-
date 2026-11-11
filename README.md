@@ -24,8 +24,11 @@ Open the URL Vite prints (usually `http://127.0.0.1:5173`).
 | --- | --- |
 | WASD / Arrow keys | Move |
 | Shift | Run |
+| `[` / `]` (or − / + on menu) | Move speed 1–10 |
 | Enter (on menu) | Start |
 | Click Begin Expedition | Start |
+
+Default move speed is **5 / 10** (a bit calmer than the first build). **7** feels close to the original faster pace. Choice is saved in the browser.
 
 ## Build
 
