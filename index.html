@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>THE LOST KINGDOM</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background:
+          radial-gradient(ellipse at top, #1a3a28 0%, transparent 55%),
+          linear-gradient(180deg, #0b1510 0%, #06100c 100%);
+        font-family: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+        overflow: hidden;
+      }
+
+      #app {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+      }
+
+      #game-container {
+        box-shadow: 0 0 0 1px rgba(180, 210, 160, 0.18), 0 24px 60px rgba(0, 0, 0, 0.45);
+      }
+
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="game-container"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
