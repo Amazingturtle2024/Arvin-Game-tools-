@@ -117,46 +117,46 @@ export class Player {
   }
 
   private animate(moving: boolean, running: boolean, delta: number): void {
-    const cadence = running ? 0.028 : 0.018;
+    // Stronger cadence so limb motion reads clearly on screen
+    const cadence = running ? 0.042 : 0.03;
     if (moving) {
       this.walkPhase += delta * cadence;
     } else {
-      // Ease back toward idle stance
-      this.walkPhase *= 0.85;
+      this.walkPhase *= 0.8;
     }
 
     const swing = moving ? Math.sin(this.walkPhase) : 0;
     const swingOpp = moving ? Math.sin(this.walkPhase + Math.PI) : 0;
-    const bob = moving ? Math.abs(Math.sin(this.walkPhase * 2)) * (running ? 2.4 : 1.6) : 0;
-    const lean = moving ? swing * (running ? 0.08 : 0.05) : 0;
+    const bob = moving ? Math.abs(Math.sin(this.walkPhase * 2)) * (running ? 3.2 : 2.2) : 0;
+    const lean = moving ? swing * (running ? 0.14 : 0.1) : 0;
 
-    // Legs
-    const legAngle = running ? 0.55 : 0.38;
-    this.leftLeg.setAngle(Phaser.Math.RadToDeg(swing * legAngle));
-    this.rightLeg.setAngle(Phaser.Math.RadToDeg(swingOpp * legAngle));
-    this.leftLeg.y = 12 + (moving ? swingOpp * 1.5 : 0);
-    this.rightLeg.y = 12 + (moving ? swing * 1.5 : 0);
+    // Legs — big alternating stride
+    const legAngle = running ? 42 : 30;
+    this.leftLeg.setAngle(swing * legAngle);
+    this.rightLeg.setAngle(swingOpp * legAngle);
+    this.leftLeg.y = 12 + (moving ? swingOpp * 3 : 0);
+    this.rightLeg.y = 12 + (moving ? swing * 3 : 0);
+    this.leftLeg.x = -5 + (moving ? swing * 2 : 0);
+    this.rightLeg.x = 5 + (moving ? swingOpp * 2 : 0);
 
-    // Body bob + slight lean
+    // Body bob + lean
     this.body.y = -2 - bob;
     this.body.setAngle(Phaser.Math.RadToDeg(lean));
 
-    // Plume flows opposite to lean
+    // Plume flows with motion
     this.plume.y = -22 - bob;
-    this.plume.setAngle(Phaser.Math.RadToDeg(-lean * 1.8 + (moving ? swing * 0.12 : 0)));
-    this.plume.x = 2 + (moving ? swing * 1.2 : 0);
+    this.plume.setAngle(-swing * 18 + Phaser.Math.RadToDeg(-lean));
+    this.plume.x = 2 + (moving ? swing * 2.5 : 0);
 
     // Shield rocks with the stride
-    this.shield.y = 2 - bob * 0.6;
-    this.shield.x = -14 + (moving ? swingOpp * 1.5 : 0);
-    this.shield.setAngle(Phaser.Math.RadToDeg(moving ? swing * 0.25 : 0) + (moving ? -6 : -4));
+    this.shield.y = 2 - bob * 0.7;
+    this.shield.x = -14 + (moving ? swingOpp * 3 : 0);
+    this.shield.setAngle((moving ? swing * 18 : 0) - 8);
 
-    // Sword swings opposite the shield arm
-    this.sword.y = -2 - bob * 0.7;
-    this.sword.x = 16 + (moving ? swing * 2 : 0);
-    this.sword.setAngle(
-      Phaser.Math.RadToDeg(moving ? swingOpp * (running ? 0.55 : 0.35) : 0) + 8,
-    );
+    // Sword swings opposite the shield
+    this.sword.y = -2 - bob * 0.8;
+    this.sword.x = 16 + (moving ? swing * 3.5 : 0);
+    this.sword.setAngle((moving ? swingOpp * (running ? 32 : 22) : 0) + 10);
 
     // Soft idle breath when standing still
     if (!moving) {
