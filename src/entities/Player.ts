@@ -2,8 +2,8 @@ import Phaser from "phaser";
 import { loadMoveSpeed, runSpeedFor, walkSpeedFor } from "../settings";
 
 /**
- * Player uses the uploaded knight picture.
- * While moving: light bob + tilt so it feels alive without layered parts.
+ * Player uses the uploaded knight picture (walk sheet frames).
+ * Smooth velocity + facing flip + bob via origin (no setDisplaySize thrash).
  */
 export class Player {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -17,20 +17,40 @@ export class Player {
   private shift: Phaser.Input.Keyboard.Key;
   private moveSpeedLevel: number;
   private walkPhase = 0;
-  private readonly baseDisplayW = 52;
-  private readonly baseDisplayH = 56;
 
   constructor(scene: Phaser.Scene, x: number, y: number, moveSpeedLevel = loadMoveSpeed()) {
     this.moveSpeedLevel = moveSpeedLevel;
-    this.sprite = scene.physics.add.sprite(x, y, "player");
+
+    this.sprite = scene.physics.add.sprite(x, y, "player", 0);
     this.sprite.setCollideWorldBounds(true);
     this.sprite.setDepth(10);
-    this.sprite.setDisplaySize(this.baseDisplayW, this.baseDisplayH);
-    this.sprite.setSize(22, 24);
+    this.sprite.setScale(0.58);
+    this.sprite.setSize(38, 42);
     this.sprite.setOffset(
-      (this.sprite.width - 22) / 2,
-      this.sprite.height - 28,
+      (this.sprite.width - 38) / 2,
+      this.sprite.height - 46,
     );
+    // Smoother physics motion
+    this.sprite.setMaxVelocity(320, 320);
+    this.sprite.setDrag(0, 0);
+    this.sprite.setBounce(0);
+
+    if (!scene.anims.exists("knight-walk")) {
+      scene.anims.create({
+        key: "knight-walk",
+        frames: scene.anims.generateFrameNumbers("player", { start: 0, end: 3 }),
+        frameRate: 8,
+        repeat: -1,
+      });
+    }
+    if (!scene.anims.exists("knight-run")) {
+      scene.anims.create({
+        key: "knight-run",
+        frames: scene.anims.generateFrameNumbers("player", { start: 0, end: 3 }),
+        frameRate: 12,
+        repeat: -1,
+      });
+    }
 
     if (!scene.input.keyboard) {
       throw new Error("Keyboard input is required for the player.");
@@ -76,29 +96,29 @@ export class Player {
       const len = Math.hypot(vx, vy);
       vx = (vx / len) * speed;
       vy = (vy / len) * speed;
-      this.walkPhase += delta * (running ? 0.028 : 0.02);
+      this.walkPhase += delta * (running ? 0.025 : 0.018);
     } else {
-      this.walkPhase *= 0.85;
+      this.walkPhase *= 0.8;
     }
 
     this.sprite.setVelocity(vx, vy);
 
-    // Art faces left in the source image — flip when moving right.
+    // Source art faces left — flip when moving right.
     if (vx > 0) this.sprite.setFlipX(true);
     else if (vx < 0) this.sprite.setFlipX(false);
 
-    // Subtle whole-body walk: bob + tiny tilt (keeps your picture intact)
     if (moving) {
-      const bob = Math.abs(Math.sin(this.walkPhase)) * (running ? 3 : 2);
-      const tilt = Math.sin(this.walkPhase) * (running ? 4 : 2.5);
-      const squash = 1 + Math.sin(this.walkPhase * 2) * 0.03;
-      this.sprite.setAngle(tilt);
-      this.sprite.setDisplaySize(this.baseDisplayW * squash, this.baseDisplayH - bob * 0.15);
-      this.sprite.setTint(running ? 0xfff4d6 : 0xffffff);
+      const anim = running ? "knight-run" : "knight-walk";
+      if (this.sprite.anims.currentAnim?.key !== anim) {
+        this.sprite.anims.play(anim, true);
+      }
+      // Soft vertical bob via origin (cheap; avoids resize thrash)
+      const bob = Math.abs(Math.sin(this.walkPhase)) * 0.04;
+      this.sprite.setOrigin(0.5, 0.55 + bob);
     } else {
-      this.sprite.setAngle(0);
-      this.sprite.setDisplaySize(this.baseDisplayW, this.baseDisplayH);
-      this.sprite.clearTint();
+      this.sprite.anims.stop();
+      this.sprite.setFrame(0);
+      this.sprite.setOrigin(0.5, 0.55);
     }
   }
 }

@@ -10,8 +10,12 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Your uploaded knight picture is the player character.
-    this.load.image("player", "assets/player-knight-v2.png");
+    // Your uploaded knight picture as a 4-frame walk sheet (same art, slight pose shifts).
+    this.load.spritesheet("player", "assets/player-knight-walk.png", {
+      frameWidth: 91,
+      frameHeight: 96,
+    });
+    this.load.image("playerStill", "assets/player-knight-v2.png");
   }
 
   create(): void {

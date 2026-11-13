@@ -26,6 +26,14 @@ export class MainMenuScene extends Phaser.Scene {
       this.add.image(x, y, "tree").setAlpha(0.22).setScale(Phaser.Math.FloatBetween(0.8, 1.4));
     }
 
+    if (this.textures.exists("playerStill")) {
+      this.add
+        .image(GAME_WIDTH - 90, GAME_HEIGHT - 24, "playerStill")
+        .setOrigin(0.5, 1)
+        .setScale(0.7)
+        .setAlpha(0.95);
+    }
+
     this.add
       .text(GAME_WIDTH / 2, 120, "THE LOST KINGDOM", {
         fontFamily: "Palatino Linotype, Palatino, Georgia, serif",

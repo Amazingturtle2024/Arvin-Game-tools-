@@ -15,11 +15,11 @@ export function createGame(parent: string): Phaser.Game {
     backgroundColor: "#0d1f14",
     fps: {
       target: 60,
-      forceSetTimeOut: false,
+      smoothStep: true,
     },
     render: {
-      antialias: false,
-      roundPixels: true,
+      antialias: true,
+      roundPixels: false,
       powerPreference: "high-performance",
     },
     physics: {
@@ -27,6 +27,7 @@ export function createGame(parent: string): Phaser.Game {
       arcade: {
         gravity: { x: 0, y: 0 },
         debug: false,
+        fps: 60,
       },
     },
     scene: [BootScene, MainMenuScene, JungleScene],

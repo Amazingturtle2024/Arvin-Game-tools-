@@ -76,9 +76,10 @@ export class JungleScene extends Phaser.Scene {
     });
 
     this.physics.add.overlap(this.player.sprite, mapScrap, () => this.collectMap(mapScrap));
-    this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
-    this.cameras.main.setRoundPixels(true);
-    this.cameras.main.fadeIn(350, 20, 80, 50);
+    // Smoother follow (roundPixels caused micro-stutter with physics)
+    this.cameras.main.startFollow(this.player.sprite, true, 0.18, 0.18);
+    this.cameras.main.setRoundPixels(false);
+    this.cameras.main.fadeIn(300, 20, 80, 50);
 
     this.createHud();
   }
@@ -280,17 +281,21 @@ export class JungleScene extends Phaser.Scene {
   }
 
   private drawGround(tiles: TileKey[][]): void {
-    // One image per tile, no per-tile tweens (those caused hitching/buffering).
+    // Bake the whole map into one texture — thousands of tile sprites were stuttering.
+    const worldW = MAP_TILES_X * TILE;
+    const worldH = MAP_TILES_Y * TILE;
+    const rt = this.add.renderTexture(0, 0, worldW, worldH).setOrigin(0, 0).setDepth(0);
+
     for (let y = 0; y < MAP_TILES_Y; y += 1) {
       for (let x = 0; x < MAP_TILES_X; x += 1) {
-        this.add.image(x * TILE + TILE / 2, y * TILE + TILE / 2, tiles[y][x]).setDepth(0);
+        rt.draw(tiles[y][x], x * TILE, y * TILE);
       }
     }
 
-    // Sparse foam only (every other shore cell)
-    for (let y = 0; y < MAP_TILES_Y; y += 1) {
-      for (let x = 0; x < MAP_TILES_X; x += 1) {
-        if (tiles[y][x] !== "water" || (x + y) % 2 !== 0) continue;
+    // Sparse foam drawn into the same bake
+    for (let y = 0; y < MAP_TILES_Y; y += 2) {
+      for (let x = 0; x < MAP_TILES_X; x += 2) {
+        if (tiles[y][x] !== "water") continue;
         const shore = [
           [x - 1, y],
           [x + 1, y],
@@ -303,11 +308,7 @@ export class JungleScene extends Phaser.Scene {
             tiles[py][px] !== "bridge",
         );
         if (shore) {
-          this.add
-            .image(x * TILE + TILE / 2, y * TILE + TILE / 2 - 6, "foam")
-            .setDepth(1)
-            .setAlpha(0.5)
-            .setScale(0.7);
+          rt.draw("foam", x * TILE + 4, y * TILE - 2);
         }
       }
     }
@@ -471,27 +472,16 @@ export class JungleScene extends Phaser.Scene {
   }
 
   private spawnFireflies(worldW: number, worldH: number): void {
-    // Few fireflies only — heavy tween counts were causing buffering.
-    for (let i = 0; i < 6; i += 1) {
-      const fly = this.add
+    // Static sparkles only (no looping tweens — those hitch on weaker GPUs).
+    for (let i = 0; i < 8; i += 1) {
+      this.add
         .image(
           Phaser.Math.Between(40, worldW - 40),
           Phaser.Math.Between(40, worldH - 40),
           "firefly",
         )
         .setDepth(8)
-        .setAlpha(0.35)
-        .setBlendMode(Phaser.BlendModes.ADD);
-      this.tweens.add({
-        targets: fly,
-        x: fly.x + Phaser.Math.Between(-24, 24),
-        y: fly.y + Phaser.Math.Between(-18, 18),
-        alpha: { from: 0.2, to: 0.8 },
-        duration: 2400,
-        yoyo: true,
-        repeat: -1,
-        delay: i * 200,
-      });
+        .setAlpha(0.45);
     }
   }
 
