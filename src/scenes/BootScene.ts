@@ -10,8 +10,8 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Still image kept for menu / reference; gameplay uses layered animated parts.
-    this.load.image("playerKnightArt", "assets/player-knight-v2.png");
+    // Your uploaded knight picture is the player character.
+    this.load.image("player", "assets/player-knight-v2.png");
   }
 
   create(): void {
@@ -21,74 +21,6 @@ export class BootScene extends Phaser.Scene {
 
   private createTextures(): void {
     const g = this.make.graphics({ x: 0, y: 0 });
-
-    // Invisible physics placeholder
-    g.clear();
-    g.fillStyle(0xffffff, 0);
-    g.fillRect(0, 0, 32, 32);
-    g.generateTexture("playerHit", 32, 32);
-
-    // Knight body (silver helm + torso) — matches attached knight theme
-    g.clear();
-    g.fillStyle(0xcfd6de, 1);
-    g.fillCircle(20, 16, 12);
-    g.fillStyle(0x9aa3ad, 1);
-    g.fillCircle(20, 18, 10);
-    g.fillStyle(0xd4af37, 1);
-    g.fillRect(14, 12, 12, 3);
-    g.fillStyle(0xf0c8a0, 1);
-    g.fillRect(16, 15, 8, 5);
-    g.fillStyle(0x3b2a1a, 1);
-    g.fillCircle(18, 17, 1.2);
-    g.fillCircle(22, 17, 1.2);
-    g.fillStyle(0xcfd6de, 1);
-    g.fillRoundedRect(12, 26, 16, 16, 4);
-    g.fillStyle(0x9aa3ad, 1);
-    g.fillRect(14, 30, 12, 3);
-    g.fillRect(14, 36, 12, 3);
-    g.generateTexture("knightBody", 40, 48);
-
-    // Red plume
-    g.clear();
-    g.fillStyle(0xe53935, 1);
-    g.fillEllipse(10, 18, 14, 28);
-    g.fillStyle(0xff7043, 1);
-    g.fillEllipse(8, 12, 8, 14);
-    g.fillStyle(0xb71c1c, 1);
-    g.fillEllipse(12, 22, 6, 12);
-    g.generateTexture("knightPlume", 20, 36);
-
-    // Armored leg
-    g.clear();
-    g.fillStyle(0xb0b8c2, 1);
-    g.fillRoundedRect(4, 0, 10, 16, 3);
-    g.fillStyle(0x8a929c, 1);
-    g.fillRoundedRect(3, 14, 12, 6, 3);
-    g.generateTexture("knightLeg", 18, 22);
-
-    // Glowing orange shield
-    g.clear();
-    g.fillStyle(0xd4af37, 1);
-    g.fillRoundedRect(2, 2, 22, 28, 4);
-    g.fillStyle(0xff9800, 1);
-    g.fillRoundedRect(5, 5, 16, 22, 3);
-    g.fillStyle(0xffe082, 0.85);
-    g.fillEllipse(13, 14, 10, 12);
-    g.generateTexture("knightShield", 26, 32);
-
-    // Sword
-    g.clear();
-    g.fillStyle(0xd4af37, 1);
-    g.fillRect(10, 18, 8, 4);
-    g.fillStyle(0xe53935, 1);
-    g.fillCircle(14, 20, 3);
-    g.fillStyle(0xb0bec5, 1);
-    g.fillRect(12, 2, 4, 18);
-    g.fillStyle(0xeceff1, 1);
-    g.fillRect(13, 3, 1.5, 14);
-    g.fillStyle(0x5d4037, 1);
-    g.fillRect(12, 22, 4, 8);
-    g.generateTexture("knightSword", 28, 34);
 
     // Round deciduous tree
     g.clear();

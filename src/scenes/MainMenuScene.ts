@@ -26,15 +26,6 @@ export class MainMenuScene extends Phaser.Scene {
       this.add.image(x, y, "tree").setAlpha(0.22).setScale(Phaser.Math.FloatBetween(0.8, 1.4));
     }
 
-    // Knight art preview (user theme)
-    if (this.textures.exists("playerKnightArt")) {
-      this.add
-        .image(GAME_WIDTH / 2, 500, "playerKnightArt")
-        .setOrigin(0.5, 1)
-        .setDisplaySize(70, 74)
-        .setAlpha(0.95);
-    }
-
     this.add
       .text(GAME_WIDTH / 2, 120, "THE LOST KINGDOM", {
         fontFamily: "Palatino Linotype, Palatino, Georgia, serif",
