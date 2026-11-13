@@ -2,7 +2,9 @@
 
 A **2D top-down** jungle adventure starter built with **Phaser 3**, **Vite**, and **TypeScript**.
 
-Phase 1: walk the jungle, hold **Shift** to run, and recover the ancient map scrap.
+Phase 1: walk a brighter pixel-style jungle (river, wooden bridge, cliffs/stairs, mushrooms), hold **Shift** to run, and recover the ancient map scrap.
+
+Art reference: `Docs/reference/jungle-pixel-style.jpg`
 
 ## Requirements
 

@@ -7,7 +7,8 @@ You are an explorer stranded in a mysterious tropical jungle after following an 
 ## Current build
 
 - **Format:** 2D top-down browser game (Phaser 3)
-- **Phase 1 shipped:** Move through a starter jungle map and recover an ancient map scrap
+- **Art direction:** Bright pixel-jungle look inspired by [`Docs/reference/jungle-pixel-style.jpg`](reference/jungle-pixel-style.jpg) (cliffs, river, wooden bridge, pines, mushrooms)
+- **Phase 1 shipped:** Move through a detailed jungle map and recover an ancient map scrap
 - **Not yet built:** Combat, inventory, wildlife AI, multi-mission campaign, save system
 
 ## Tone
