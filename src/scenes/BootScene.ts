@@ -11,7 +11,7 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     // Player art from Docs/reference/player-knight.png (user-provided knight theme)
-    this.load.image("player", "assets/player-knight.png");
+    this.load.image("player", "assets/player-knight-v2.png");
   }
 
   create(): void {

@@ -18,10 +18,10 @@ export class Player {
     this.sprite = scene.physics.add.sprite(x, y, "player");
     this.sprite.setCollideWorldBounds(true);
     this.sprite.setDepth(10);
-    // Knight sprite from public/assets/player-knight.png
-    this.sprite.setDisplaySize(48, 52);
-    this.sprite.setSize(28, 30);
-    this.sprite.setOffset((this.sprite.width - 28) / 2, this.sprite.height - 34);
+    // Knight sprite from public/assets/player-knight-v2.png
+    this.sprite.setDisplaySize(46, 50);
+    this.sprite.setSize(24, 28);
+    this.sprite.setOffset((this.sprite.width - 24) / 2, this.sprite.height - 30);
 
     if (!scene.input.keyboard) {
       throw new Error("Keyboard input is required for the player.");
