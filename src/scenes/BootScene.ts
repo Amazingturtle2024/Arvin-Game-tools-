@@ -10,11 +10,9 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Your uploaded knight picture as a 4-frame walk sheet (same art, slight pose shifts).
-    this.load.spritesheet("player", "assets/player-knight-walk.png", {
-      frameWidth: 91,
-      frameHeight: 96,
-    });
+    // Your uploaded knight — split for leg + sword animation
+    this.load.image("knightTorso", "assets/knight-torso.png");
+    this.load.image("knightSword", "assets/knight-sword.png");
     this.load.image("playerStill", "assets/player-knight-v2.png");
   }
 
@@ -25,6 +23,22 @@ export class BootScene extends Phaser.Scene {
 
   private createTextures(): void {
     const g = this.make.graphics({ x: 0, y: 0 });
+
+    // Invisible physics hitch
+    g.clear();
+    g.fillStyle(0xffffff, 0);
+    g.fillRect(0, 0, 32, 32);
+    g.generateTexture("playerHit", 32, 32);
+
+    // Silver armored legs matching the knight boots
+    g.clear();
+    g.fillStyle(0xb0b8c2, 1);
+    g.fillRoundedRect(5, 0, 10, 14, 3);
+    g.fillStyle(0x8a929c, 1);
+    g.fillRoundedRect(3, 12, 14, 8, 4);
+    g.fillStyle(0xd5dae0, 1);
+    g.fillRect(6, 2, 3, 8);
+    g.generateTexture("knightLeg", 20, 22);
 
     // Round deciduous tree
     g.clear();
