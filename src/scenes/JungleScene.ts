@@ -76,14 +76,15 @@ export class JungleScene extends Phaser.Scene {
     });
 
     this.physics.add.overlap(this.player.sprite, mapScrap, () => this.collectMap(mapScrap));
-    this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1);
-    this.cameras.main.fadeIn(450, 20, 80, 50);
+    this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
+    this.cameras.main.setRoundPixels(true);
+    this.cameras.main.fadeIn(350, 20, 80, 50);
 
     this.createHud();
   }
 
-  update(): void {
-    this.player.update();
+  update(time: number, delta: number): void {
+    this.player.update(time, delta);
   }
 
   private createHud(): void {
@@ -279,26 +280,17 @@ export class JungleScene extends Phaser.Scene {
   }
 
   private drawGround(tiles: TileKey[][]): void {
+    // One image per tile, no per-tile tweens (those caused hitching/buffering).
     for (let y = 0; y < MAP_TILES_Y; y += 1) {
       for (let x = 0; x < MAP_TILES_X; x += 1) {
-        const key = tiles[y][x];
-        const img = this.add.image(x * TILE + TILE / 2, y * TILE + TILE / 2, key).setDepth(0);
-        if (key === "water") {
-          this.tweens.add({
-            targets: img,
-            alpha: { from: 0.88, to: 1 },
-            duration: 1400 + ((x + y) % 4) * 150,
-            yoyo: true,
-            repeat: -1,
-          });
-        }
+        this.add.image(x * TILE + TILE / 2, y * TILE + TILE / 2, tiles[y][x]).setDepth(0);
       }
     }
 
-    // Foam along water edges
+    // Sparse foam only (every other shore cell)
     for (let y = 0; y < MAP_TILES_Y; y += 1) {
       for (let x = 0; x < MAP_TILES_X; x += 1) {
-        if (tiles[y][x] !== "water") continue;
+        if (tiles[y][x] !== "water" || (x + y) % 2 !== 0) continue;
         const shore = [
           [x - 1, y],
           [x + 1, y],
@@ -314,8 +306,35 @@ export class JungleScene extends Phaser.Scene {
           this.add
             .image(x * TILE + TILE / 2, y * TILE + TILE / 2 - 6, "foam")
             .setDepth(1)
-            .setAlpha(0.55)
+            .setAlpha(0.5)
             .setScale(0.7);
+        }
+      }
+    }
+  }
+
+  private addMergedCollision(
+    obstacles: Phaser.Physics.Arcade.StaticGroup,
+    tiles: TileKey[][],
+    kind: TileKey,
+  ): void {
+    // Merge horizontal runs into fewer physics bodies to cut lag.
+    for (let y = 0; y < MAP_TILES_Y; y += 1) {
+      let runStart = -1;
+      for (let x = 0; x <= MAP_TILES_X; x += 1) {
+        const match = x < MAP_TILES_X && tiles[y][x] === kind;
+        if (match && runStart < 0) runStart = x;
+        if (!match && runStart >= 0) {
+          const runEnd = x - 1;
+          const width = (runEnd - runStart + 1) * TILE;
+          const cx = runStart * TILE + width / 2;
+          const cy = y * TILE + TILE / 2;
+          const body = obstacles.create(cx, cy, kind) as Phaser.Physics.Arcade.Sprite;
+          body.setVisible(false);
+          body.setDisplaySize(width, TILE);
+          body.refreshBody();
+          body.body!.setSize(width, TILE - 2);
+          runStart = -1;
         }
       }
     }
@@ -325,40 +344,14 @@ export class JungleScene extends Phaser.Scene {
     obstacles: Phaser.Physics.Arcade.StaticGroup,
     tiles: TileKey[][],
   ): void {
-    for (let y = 0; y < MAP_TILES_Y; y += 1) {
-      for (let x = 0; x < MAP_TILES_X; x += 1) {
-        if (tiles[y][x] !== "water") continue;
-        const body = obstacles.create(
-          x * TILE + TILE / 2,
-          y * TILE + TILE / 2,
-          "water",
-        ) as Phaser.Physics.Arcade.Sprite;
-        body.setVisible(false);
-        body.setSize(30, 30);
-        body.setOffset(1, 1);
-        body.refreshBody();
-      }
-    }
+    this.addMergedCollision(obstacles, tiles, "water");
   }
 
   private addCliffCollision(
     obstacles: Phaser.Physics.Arcade.StaticGroup,
     tiles: TileKey[][],
   ): void {
-    for (let y = 0; y < MAP_TILES_Y; y += 1) {
-      for (let x = 0; x < MAP_TILES_X; x += 1) {
-        if (tiles[y][x] !== "cliff") continue;
-        const body = obstacles.create(
-          x * TILE + TILE / 2,
-          y * TILE + TILE / 2,
-          "cliff",
-        ) as Phaser.Physics.Arcade.Sprite;
-        body.setVisible(false);
-        body.setSize(32, 28);
-        body.setOffset(0, 2);
-        body.refreshBody();
-      }
-    }
+    this.addMergedCollision(obstacles, tiles, "cliff");
   }
 
   private placeFoliage(
@@ -367,7 +360,7 @@ export class JungleScene extends Phaser.Scene {
   ): void {
     let placed = 0;
     let attempts = 0;
-    while (placed < 120 && attempts < 800) {
+    while (placed < 55 && attempts < 400) {
       attempts += 1;
       const tx = Phaser.Math.Between(1, MAP_TILES_X - 2);
       const ty = Phaser.Math.Between(1, MAP_TILES_Y - 2);
@@ -403,21 +396,19 @@ export class JungleScene extends Phaser.Scene {
       } else if (key === "bush") {
         sprite.setSize(20, 12);
         sprite.setOffset(6, 10);
-        this.sway(sprite, 1.5);
       } else if (key === "log") {
         sprite.setSize(36, 12);
         sprite.setOffset(6, 10);
       } else {
         sprite.setSize(16, 14);
         sprite.setOffset(9, 28);
-        this.sway(sprite, 1.2);
       }
       sprite.refreshBody();
       placed += 1;
     }
 
-    // Passable mushrooms / flowers / tufts
-    for (let i = 0; i < 100; i += 1) {
+    // Passable mushrooms / flowers / tufts (static — no glow tweens)
+    for (let i = 0; i < 40; i += 1) {
       const tx = Phaser.Math.Between(1, MAP_TILES_X - 2);
       const ty = Phaser.Math.Between(1, MAP_TILES_Y - 2);
       const ground = tiles[ty][tx];
@@ -426,58 +417,34 @@ export class JungleScene extends Phaser.Scene {
       }
       const keys = ["mushroomRed", "mushroomBlue", "mushroomBrown", "flowers", "grassTuft"] as const;
       const key = keys[i % keys.length];
-      const deco = this.add
+      this.add
         .image(tx * TILE + TILE / 2, ty * TILE + TILE / 2, key)
         .setDepth(2)
         .setScale(Phaser.Math.FloatBetween(0.85, 1.15));
-      if (key === "mushroomBlue") {
-        this.tweens.add({
-          targets: deco,
-          alpha: { from: 0.65, to: 1 },
-          duration: 900,
-          yoyo: true,
-          repeat: -1,
-        });
-      }
     }
   }
 
   private placeWaterDecor(tiles: TileKey[][]): void {
+    let reeds = 0;
+    let lilies = 0;
     for (let y = 0; y < MAP_TILES_Y; y += 1) {
       for (let x = 0; x < MAP_TILES_X; x += 1) {
         if (tiles[y][x] !== "water" && tiles[y][x] !== "mud") continue;
-        if ((x + y) % 5 !== 0) continue;
+        if ((x + y) % 7 !== 0) continue;
 
-        if (tiles[y][x] === "mud" || (tiles[y][x] === "water" && (x + y) % 7 === 0)) {
-          const reeds = this.add
+        if (tiles[y][x] === "mud" && reeds < 18) {
+          this.add
             .image(x * TILE + TILE / 2, y * TILE + TILE / 2 - 4, "reeds")
             .setDepth(2)
-            .setScale(Phaser.Math.FloatBetween(0.9, 1.2));
-          this.sway(reeds, 2.5);
+            .setScale(Phaser.Math.FloatBetween(0.9, 1.15));
+          reeds += 1;
         }
-        if (tiles[y][x] === "water" && (x * y) % 11 === 0) {
-          const lily = this.add
+        if (tiles[y][x] === "water" && lilies < 12 && (x * y) % 13 === 0) {
+          this.add
             .image(x * TILE + TILE / 2, y * TILE + TILE / 2, "lily")
             .setDepth(2)
             .setAlpha(0.95);
-          this.tweens.add({
-            targets: lily,
-            x: lily.x + Phaser.Math.Between(-3, 3),
-            duration: 2600,
-            yoyo: true,
-            repeat: -1,
-          });
-        }
-        if (tiles[y][x] === "water" && (x + y * 3) % 17 === 0) {
-          const log = this.add.image(x * TILE + TILE / 2, y * TILE + TILE / 2, "log").setDepth(2);
-          this.tweens.add({
-            targets: log,
-            x: log.x + 6,
-            angle: { from: -2, to: 2 },
-            duration: 3200,
-            yoyo: true,
-            repeat: -1,
-          });
+          lilies += 1;
         }
       }
     }
@@ -504,7 +471,8 @@ export class JungleScene extends Phaser.Scene {
   }
 
   private spawnFireflies(worldW: number, worldH: number): void {
-    for (let i = 0; i < 20; i += 1) {
+    // Few fireflies only — heavy tween counts were causing buffering.
+    for (let i = 0; i < 6; i += 1) {
       const fly = this.add
         .image(
           Phaser.Math.Between(40, worldW - 40),
@@ -512,29 +480,19 @@ export class JungleScene extends Phaser.Scene {
           "firefly",
         )
         .setDepth(8)
-        .setAlpha(0.25)
+        .setAlpha(0.35)
         .setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({
         targets: fly,
-        x: fly.x + Phaser.Math.Between(-36, 36),
-        y: fly.y + Phaser.Math.Between(-28, 28),
-        alpha: { from: 0.2, to: 0.95 },
-        duration: Phaser.Math.Between(1600, 3000),
+        x: fly.x + Phaser.Math.Between(-24, 24),
+        y: fly.y + Phaser.Math.Between(-18, 18),
+        alpha: { from: 0.2, to: 0.8 },
+        duration: 2400,
         yoyo: true,
         repeat: -1,
-        delay: Phaser.Math.Between(0, 1200),
+        delay: i * 200,
       });
     }
-  }
-
-  private sway(target: Phaser.GameObjects.Image | Phaser.Physics.Arcade.Sprite, amount: number): void {
-    this.tweens.add({
-      targets: target,
-      angle: { from: -amount, to: amount },
-      duration: Phaser.Math.Between(1800, 3200),
-      yoyo: true,
-      repeat: -1,
-    });
   }
 
   private collectMap(mapScrap: Phaser.Physics.Arcade.Image): void {

@@ -20,10 +20,19 @@ export class MainMenuScene extends Phaser.Scene {
 
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0b1a12);
 
-    for (let i = 0; i < 18; i += 1) {
+    for (let i = 0; i < 12; i += 1) {
       const x = Phaser.Math.Between(40, GAME_WIDTH - 40);
       const y = Phaser.Math.Between(40, GAME_HEIGHT - 40);
       this.add.image(x, y, "tree").setAlpha(0.22).setScale(Phaser.Math.FloatBetween(0.8, 1.4));
+    }
+
+    // Knight art preview (user theme)
+    if (this.textures.exists("playerKnightArt")) {
+      this.add
+        .image(GAME_WIDTH / 2, 500, "playerKnightArt")
+        .setOrigin(0.5, 1)
+        .setDisplaySize(70, 74)
+        .setAlpha(0.95);
     }
 
     this.add

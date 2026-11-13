@@ -13,6 +13,15 @@ export function createGame(parent: string): Phaser.Game {
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
     backgroundColor: "#0d1f14",
+    fps: {
+      target: 60,
+      forceSetTimeOut: false,
+    },
+    render: {
+      antialias: false,
+      roundPixels: true,
+      powerPreference: "high-performance",
+    },
     physics: {
       default: "arcade",
       arcade: {
