@@ -18,10 +18,10 @@ export class Player {
     this.sprite = scene.physics.add.sprite(x, y, "player");
     this.sprite.setCollideWorldBounds(true);
     this.sprite.setDepth(10);
-    // Knight art is wide (shield + sword); hitbox stays near the armored body.
-    this.sprite.setDisplaySize(58, 44);
-    this.sprite.setSize(36, 28);
-    this.sprite.setOffset((this.sprite.width - 36) / 2, this.sprite.height - 32);
+    // Knight sprite from public/assets/player-knight.png
+    this.sprite.setDisplaySize(48, 52);
+    this.sprite.setSize(28, 30);
+    this.sprite.setOffset((this.sprite.width - 28) / 2, this.sprite.height - 34);
 
     if (!scene.input.keyboard) {
       throw new Error("Keyboard input is required for the player.");
