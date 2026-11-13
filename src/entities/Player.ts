@@ -2,16 +2,15 @@ import Phaser from "phaser";
 import { loadMoveSpeed, runSpeedFor, walkSpeedFor } from "../settings";
 
 /**
- * Your knight picture as torso + animated legs + swinging sword (from your art).
+ * Your full knight picture as the body, with animated legs + sword overlay.
  */
 export class Player {
-  /** Physics body (invisible hitch for collisions / camera). */
   readonly sprite: Phaser.Physics.Arcade.Sprite;
 
   private readonly visual: Phaser.GameObjects.Container;
   private readonly leftLeg: Phaser.GameObjects.Image;
   private readonly rightLeg: Phaser.GameObjects.Image;
-  private readonly torso: Phaser.GameObjects.Image;
+  private readonly body: Phaser.GameObjects.Image;
   private readonly sword: Phaser.GameObjects.Image;
   private readonly shadow: Phaser.GameObjects.Ellipse;
 
@@ -25,7 +24,7 @@ export class Player {
   private shift: Phaser.Input.Keyboard.Key;
   private moveSpeedLevel: number;
   private walkPhase = 0;
-  private facing = 1; // 1 rightward visual (flipped), -1 = art native (faces left)
+  private facing = -1;
 
   constructor(scene: Phaser.Scene, x: number, y: number, moveSpeedLevel = loadMoveSpeed()) {
     this.moveSpeedLevel = moveSpeedLevel;
@@ -38,25 +37,25 @@ export class Player {
     this.sprite.setDepth(10);
     this.sprite.setMaxVelocity(320, 320);
 
-    this.shadow = scene.add.ellipse(0, 20, 30, 10, 0x000000, 0.25);
+    this.shadow = scene.add.ellipse(0, 22, 32, 10, 0x000000, 0.28);
 
-    // Art faces left; assembled facing preserved via container flip
-    this.torso = scene.add.image(0, -10, "knightTorso").setOrigin(0.5, 0.75);
-    this.torso.setDisplaySize(54, 46);
+    // Full knight art (feet cleared) — keeps your look intact
+    this.body = scene.add.image(0, -4, "knightTorso").setOrigin(0.5, 0.72);
+    this.body.setDisplaySize(56, 52);
 
-    // Legs render IN FRONT of torso so the stride is visible
-    this.leftLeg = scene.add.image(-7, 8, "knightLeg").setOrigin(0.5, 0);
-    this.rightLeg = scene.add.image(7, 8, "knightLeg").setOrigin(0.5, 0);
-    this.leftLeg.setDisplaySize(14, 20);
-    this.rightLeg.setDisplaySize(14, 20);
+    // Legs under the body, drawn on top of the lower edge so strides read
+    this.leftLeg = scene.add.image(-8, 12, "knightLeg").setOrigin(0.5, 0);
+    this.rightLeg = scene.add.image(8, 12, "knightLeg").setOrigin(0.5, 0);
+    this.leftLeg.setDisplaySize(13, 18);
+    this.rightLeg.setDisplaySize(13, 18);
 
-    // Sword pivot at the hilt — large swing, drawn on top
-    this.sword = scene.add.image(16, -4, "knightSword").setOrigin(0.35, 0.88);
-    this.sword.setDisplaySize(26, 46);
+    // Sword from your art — covers static sword and swings while walking
+    this.sword = scene.add.image(18, 0, "knightSword").setOrigin(0.3, 0.9);
+    this.sword.setDisplaySize(24, 44);
 
     this.visual = scene.add.container(x, y, [
       this.shadow,
-      this.torso,
+      this.body,
       this.leftLeg,
       this.rightLeg,
       this.sword,
@@ -107,7 +106,7 @@ export class Player {
       const len = Math.hypot(vx, vy);
       vx = (vx / len) * speed;
       vy = (vy / len) * speed;
-      this.walkPhase += delta * (running ? 0.038 : 0.028);
+      this.walkPhase += delta * (running ? 0.04 : 0.03);
     } else {
       this.walkPhase *= 0.82;
     }
@@ -115,7 +114,7 @@ export class Player {
     this.sprite.setVelocity(vx, vy);
     this.visual.setPosition(this.sprite.x, this.sprite.y);
 
-    // Art faces left natively. Flip container when moving right.
+    // Art faces left. Flip when moving right.
     if (vx > 0) this.facing = 1;
     else if (vx < 0) this.facing = -1;
     this.visual.setScale(this.facing, 1);
@@ -126,36 +125,33 @@ export class Player {
   private animate(moving: boolean, running: boolean): void {
     const swing = moving ? Math.sin(this.walkPhase) : 0;
     const swingOpp = moving ? Math.sin(this.walkPhase + Math.PI) : 0;
-    const bob = moving ? Math.abs(Math.sin(this.walkPhase * 2)) * (running ? 2.8 : 1.8) : 0;
+    const bob = moving ? Math.abs(Math.sin(this.walkPhase * 2)) * (running ? 2.5 : 1.6) : 0;
 
-    // --- Legs (big alternating stride) ---
-    const legDeg = running ? 48 : 36;
+    // Legs
+    const legDeg = running ? 42 : 32;
     this.leftLeg.setAngle(swing * legDeg);
     this.rightLeg.setAngle(swingOpp * legDeg);
-    this.leftLeg.y = 8 + (moving ? swingOpp * 3 : 0);
-    this.rightLeg.y = 8 + (moving ? swing * 3 : 0);
-    this.leftLeg.x = -7 + (moving ? swing * 2.5 : 0);
-    this.rightLeg.x = 7 + (moving ? swingOpp * 2.5 : 0);
+    this.leftLeg.setPosition(-8 + swing * 2, 12 + swingOpp * 2.5);
+    this.rightLeg.setPosition(8 + swingOpp * 2, 12 + swing * 2.5);
 
-    // --- Torso bob (your knight art) ---
-    this.torso.y = -10 - bob;
-    this.torso.setAngle(moving ? swing * 4 : 0);
+    // Body (your picture)
+    this.body.y = -4 - bob;
+    this.body.setAngle(moving ? swing * 3.5 : 0);
 
-    // --- Sword swing (your sword art) ---
-    const swordDeg = running ? 55 : 40;
-    this.sword.y = -4 - bob * 0.8;
-    this.sword.x = 16 + (moving ? swing * 3 : 0);
-    this.sword.setAngle((moving ? swingOpp * swordDeg : 0) + 8);
+    // Sword swing
+    const swordDeg = running ? 50 : 36;
+    this.sword.setPosition(18 + swing * 2.5, 0 - bob * 0.7);
+    this.sword.setAngle((moving ? swingOpp * swordDeg : 0) + 6);
 
     if (!moving) {
-      const breath = Math.sin(Date.now() / 500) * 0.5;
-      this.torso.y = -10 + breath;
-      this.sword.y = -4 + breath * 0.4;
-      this.leftLeg.setAngle(-4);
-      this.rightLeg.setAngle(4);
-      this.leftLeg.setPosition(-7, 8);
-      this.rightLeg.setPosition(7, 8);
-      this.sword.setAngle(8);
+      const breath = Math.sin(Date.now() / 480) * 0.45;
+      this.body.y = -4 + breath;
+      this.sword.y = breath * 0.35;
+      this.leftLeg.setAngle(-3);
+      this.rightLeg.setAngle(3);
+      this.leftLeg.setPosition(-8, 12);
+      this.rightLeg.setPosition(8, 12);
+      this.sword.setAngle(6);
     }
   }
 }
