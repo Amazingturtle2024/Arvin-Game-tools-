@@ -9,6 +9,11 @@ export class BootScene extends Phaser.Scene {
     super("Boot");
   }
 
+  preload(): void {
+    // Player art from Docs/reference/player-knight.png (user-provided knight theme)
+    this.load.image("player", "assets/player-knight.png");
+  }
+
   create(): void {
     this.createTextures();
     this.scene.start("MainMenu");
@@ -16,22 +21,6 @@ export class BootScene extends Phaser.Scene {
 
   private createTextures(): void {
     const g = this.make.graphics({ x: 0, y: 0 });
-
-    // Chibi-ish explorer (yellow tunic like reference)
-    g.clear();
-    g.fillStyle(0xf0c8a0, 1);
-    g.fillCircle(16, 12, 8);
-    g.fillStyle(0xc47a3a, 1);
-    g.fillRect(9, 6, 14, 5);
-    g.fillStyle(0xf2d84a, 1);
-    g.fillRoundedRect(9, 18, 14, 12, 3);
-    g.fillStyle(0x3a6ec9, 1);
-    g.fillRect(10, 28, 5, 4);
-    g.fillRect(17, 28, 5, 4);
-    g.fillStyle(0x1b1b1b, 1);
-    g.fillCircle(13, 12, 1.5);
-    g.fillCircle(19, 12, 1.5);
-    g.generateTexture("player", 32, 32);
 
     // Round deciduous tree
     g.clear();

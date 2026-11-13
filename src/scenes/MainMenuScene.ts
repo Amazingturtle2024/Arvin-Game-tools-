@@ -37,7 +37,7 @@ export class MainMenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(GAME_WIDTH / 2, 180, "A stranded explorer. A forgotten jungle.\nFind the ancient map scrap.", {
+      .text(GAME_WIDTH / 2, 180, "A stranded knight. A forgotten jungle.\nFind the ancient map scrap.", {
         fontFamily: "Palatino Linotype, Palatino, Georgia, serif",
         fontSize: "18px",
         color: "#b7c9b0",

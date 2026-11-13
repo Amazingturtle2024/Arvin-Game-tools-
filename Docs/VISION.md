@@ -8,6 +8,7 @@ You are an explorer stranded in a mysterious tropical jungle after following an 
 
 - **Format:** 2D top-down browser game (Phaser 3)
 - **Art direction:** Bright pixel-jungle look inspired by [`Docs/reference/jungle-pixel-style.jpg`](reference/jungle-pixel-style.jpg) (cliffs, river, wooden bridge, pines, mushrooms)
+- **Player:** Chibi knight (silver armor, red plume, glowing shield) from [`Docs/reference/player-knight.png`](reference/player-knight.png)
 - **Phase 1 shipped:** Move through a detailed jungle map and recover an ancient map scrap
 - **Not yet built:** Combat, inventory, wildlife AI, multi-mission campaign, save system
 
