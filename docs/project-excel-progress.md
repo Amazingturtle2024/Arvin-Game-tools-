@@ -66,4 +66,4 @@ Read-only inventory: [`samples/123-task-inventory.csv`](../samples/123-task-inve
 | Sheet `Progress` missing | Don’t rename the sheet; re-export if needed. |
 | Summaries skipped | Expected — edit leaf % only; summaries roll up. |
 | UniqueID not found | You may be importing into a different `.mpp` than the one exported. |
-| Protected sheet | Export uses empty-password protection so only Name / leaf % are editable; Review → Unprotect Sheet if you need more. |
+| Protected sheet | Export locks join/context columns but allows AutoFilter/sort (filter Summary = N). Review → Unprotect Sheet only if you need to edit locked cells. |

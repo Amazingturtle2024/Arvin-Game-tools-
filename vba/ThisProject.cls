@@ -61,6 +61,8 @@ Public Sub ExportProgressToExcel()
     Dim taskCount As Long
     Dim leafCount As Long
     Dim summaryCount As Long
+    Dim errNum As Long
+    Dim errDesc As String
 
     If ActiveProject Is Nothing Then
         MsgBox "No project is open.", vbExclamation, "Export Progress"
@@ -140,9 +142,14 @@ Public Sub ExportProgressToExcel()
     Exit Sub
 
 Fail:
+    ' Capture before CleanupExcel — its On Error Resume Next clears Err.
+    errNum = Err.Number
+    errDesc = Err.Description
     Application.StatusBar = False
     CleanupExcel xlApp, xlBook
-    MsgBox "Export failed:" & vbCrLf & Err.Description, vbCritical, "Export Progress"
+    MsgBox "Export failed:" & vbCrLf & errDesc & _
+           IIf(errNum <> 0, " (Error " & CStr(errNum) & ")", ""), _
+           vbCritical, "Export Progress"
 End Sub
 
 Public Sub ImportProgressFromExcel()
@@ -157,7 +164,7 @@ Public Sub ImportProgressFromExcel()
     Dim uid As Long
     Dim t As Task
     Dim newPct As Double
-    Dim newName As String
+    Dim excelName As String
     Dim updated As Long
     Dim skippedSummary As Long
     Dim missing As Long
@@ -165,6 +172,8 @@ Public Sub ImportProgressFromExcel()
     Dim unchanged As Long
     Dim rawUid As Variant
     Dim rawPct As Variant
+    Dim errNum As Long
+    Dim errDesc As String
 
     If ActiveProject Is Nothing Then
         MsgBox "No project is open.", vbExclamation, "Import Progress"
@@ -234,10 +243,13 @@ Public Sub ImportProgressFromExcel()
         End If
 
         ' Optional Task Name sync (never invents new tasks).
-        newName = Trim$(CStr(xlSheet.Cells(row, COL_TASK_NAME).Value & ""))
-        If Len(newName) > 0 Then
-            If t.Name <> newName Then
-                t.Name = newName
+        ' Compare Trim of both sides so trailing/leading spaces already on the
+        ' Project name (common in this programme) are not rewritten solely
+        ' because Excel/import trimmed them. Only rename on a real content edit.
+        excelName = CStr(xlSheet.Cells(row, COL_TASK_NAME).Value & "")
+        If Len(Trim$(excelName)) > 0 Then
+            If Trim$(t.Name) <> Trim$(excelName) Then
+                t.Name = Trim$(excelName)
                 nameChanges = nameChanges + 1
             End If
         End If
@@ -282,9 +294,14 @@ NextRow:
     Exit Sub
 
 Fail:
+    ' Capture before CleanupExcel — its On Error Resume Next clears Err.
+    errNum = Err.Number
+    errDesc = Err.Description
     Application.StatusBar = False
     CleanupExcel xlApp, xlBook
-    MsgBox "Import failed:" & vbCrLf & Err.Description, vbCritical, "Import Progress"
+    MsgBox "Import failed:" & vbCrLf & errDesc & _
+           IIf(errNum <> 0, " (Error " & CStr(errNum) & ")", ""), _
+           vbCritical, "Import Progress"
 End Sub
 
 '------------------------------------------------------------------------------
@@ -417,13 +434,12 @@ Private Sub FormatProgressSheet(ByVal xlSheet As Object, ByVal lastDataRow As Lo
     On Error Resume Next
     xlSheet.Range(xlSheet.Cells(HEADER_ROW, COL_UNIQUE_ID), _
                   xlSheet.Cells(lastDataRow, COL_SUMMARY)).AutoFilter
-    ' Default filter hint: user can filter Summary = N for leaf-only editing.
+    ' AllowFiltering/AllowSorting so Summary=N filter works while protected.
+    ' Do not Activate/Select here — Excel is usually Visible=False during export;
+    ' Select on a hidden window raises 1004 and would abort before SaveAs.
     xlSheet.Protect Password:="", DrawingObjects:=True, Contents:=True, Scenarios:=True, _
-                    UserInterfaceOnly:=True
+                    UserInterfaceOnly:=True, AllowFiltering:=True, AllowSorting:=True
     On Error GoTo 0
-
-    xlSheet.Activate
-    xlSheet.Cells(FIRST_DATA_ROW, COL_PCT).Select
 End Sub
 
 Private Sub EnsureParentFolder(ByVal filePath As String)
