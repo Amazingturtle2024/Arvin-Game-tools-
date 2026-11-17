@@ -552,15 +552,45 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
     ' reverts Finish, and needless date writes plant SNET/FNLT constraints.
     ' Never DateValue-only midnights: keep Excel time if present, else Project
     ' DefaultStartTime / DefaultEndTime (fallback 08:00 / 17:00).
+    ' Milestones (Duration 0 / t.Milestone): one working instant — DefaultStartTime
+    ' only; never DefaultEndTime (that expands 0-day into 08:00–17:00).
     ' Never CDate(t.Start/Finish) when Project says NA — that aborts import.
     Dim curStart As Date
     Dim curFinish As Date
     Dim hasCurStart As Boolean
     Dim hasCurFinish As Boolean
+    Dim treatAsMilestone As Boolean
+    Dim milestoneInstant As Date
+    Dim hasExcelDur As Boolean
 
     startChanged = False
     finishChanged = False
     durationChanged = False
+    treatAsMilestone = False
+    hasExcelDur = False
+    newDurMin = -1
+
+    rawDur = xlSheet.Cells(row, COL_DURATION).Value
+    If Not IsBlank(rawDur) And IsNumeric(rawDur) Then
+        hasExcelDur = True
+        newDurMin = CDbl(rawDur) * 60# * hoursPerDay
+        If newDurMin < 0 Then newDurMin = 0
+        If Abs(CDbl(rawDur)) < 0.0001 Then treatAsMilestone = True
+        On Error Resume Next
+        curDurDays = Round(t.Duration / 60# / hoursPerDay, 2)
+        If Err.Number = 0 Then
+            If Abs(curDurDays - Round(CDbl(rawDur), 2)) > 0.009 Then durationChanged = True
+        Else
+            durationChanged = True
+        End If
+        Err.Clear
+        On Error GoTo 0
+    Else
+        On Error Resume Next
+        If t.Milestone Or t.Duration = 0 Then treatAsMilestone = True
+        Err.Clear
+        On Error GoTo 0
+    End If
 
     rawStart = xlSheet.Cells(row, COL_START).Value
     If ExcelCellToProjectDate(rawStart, False, newStart) Then
@@ -575,34 +605,73 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
     End If
 
     rawFinish = xlSheet.Cells(row, COL_FINISH).Value
-    If ExcelCellToProjectDate(rawFinish, True, newFinish) Then
+    ' Milestones: date-only finish uses start-of-day working time, not end-of-day.
+    If ExcelCellToProjectDate(rawFinish, Not treatAsMilestone, newFinish) Then
+        If treatAsMilestone And Not ExcelValueHasTime(rawFinish) Then
+            ' Same calendar day finish as a zero-length instant at start time.
+            newFinish = DateValue(newFinish) + TimeValue(ProjectDefaultStartTime())
+        End If
         hasCurFinish = TryGetTaskDate(t.Finish, curFinish)
-        If Not hasCurFinish Then
-            finishChanged = True
-        ElseIf DateValue(curFinish) <> DateValue(newFinish) Then
-            finishChanged = True
-        ElseIf ExcelValueHasTime(rawFinish) And Abs(DateDiff("n", curFinish, newFinish)) > 0 Then
-            finishChanged = True
+        If treatAsMilestone Then
+            ' Only treat finish as changed when the calendar day moves (or explicit time).
+            If Not hasCurFinish Then
+                finishChanged = True
+            ElseIf DateValue(curFinish) <> DateValue(newFinish) Then
+                finishChanged = True
+            ElseIf ExcelValueHasTime(rawFinish) And Abs(DateDiff("n", curFinish, newFinish)) > 0 Then
+                finishChanged = True
+            End If
+        Else
+            If Not hasCurFinish Then
+                finishChanged = True
+            ElseIf DateValue(curFinish) <> DateValue(newFinish) Then
+                finishChanged = True
+            ElseIf ExcelValueHasTime(rawFinish) And Abs(DateDiff("n", curFinish, newFinish)) > 0 Then
+                finishChanged = True
+            End If
         End If
-    End If
-
-    rawDur = xlSheet.Cells(row, COL_DURATION).Value
-    If Not IsBlank(rawDur) And IsNumeric(rawDur) Then
-        newDurMin = CDbl(rawDur) * 60# * hoursPerDay
-        If newDurMin < 0 Then newDurMin = 0
-        On Error Resume Next
-        curDurDays = Round(t.Duration / 60# / hoursPerDay, 2)
-        If Err.Number = 0 Then
-            If Abs(curDurDays - Round(CDbl(rawDur), 2)) > 0.009 Then durationChanged = True
-        End If
-        Err.Clear
-        On Error GoTo 0
     End If
 
     On Error Resume Next
-    If startChanged Or finishChanged Or durationChanged Then
+    If treatAsMilestone And (startChanged Or finishChanged Or durationChanged) Then
+        ' Keep milestone: Duration 0, Start=Finish at one working instant.
+        If startChanged Then
+            milestoneInstant = newStart
+        ElseIf finishChanged Then
+            milestoneInstant = newFinish
+        ElseIf hasCurStart Then
+            milestoneInstant = curStart
+        ElseIf ExcelCellToProjectDate(rawStart, False, milestoneInstant) Then
+            ' ok
+        ElseIf ExcelCellToProjectDate(rawFinish, False, milestoneInstant) Then
+            ' ok
+        Else
+            GoTo AfterScheduleApply
+        End If
+
+        t.Duration = 0
+        If Err.Number = 0 And hasExcelDur And durationChanged Then
+            durChanges = durChanges + 1
+            touched = True
+        End If
+        Err.Clear
+
+        t.Start = milestoneInstant
+        If Err.Number = 0 Then
+            If startChanged Or finishChanged Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+        End If
+        Err.Clear
+
+        ' Ensure Finish matches Start (Project usually does this for Duration=0).
+        t.Finish = milestoneInstant
+        Err.Clear
+        If Not t.Milestone Then t.Milestone = True
+        Err.Clear
+    ElseIf (Not treatAsMilestone) And (startChanged Or finishChanged Or durationChanged) Then
         If durationChanged And Not startChanged And Not finishChanged Then
-            ' Duration-only edit.
             t.Duration = newDurMin
             If Err.Number = 0 Then
                 durChanges = durChanges + 1
@@ -610,7 +679,6 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
             End If
             Err.Clear
         ElseIf startChanged And durationChanged Then
-            ' Start + Duration; skip Finish (may be stale relative to new duration).
             t.Start = newStart
             If Err.Number = 0 Then
                 dateChanges = dateChanges + 1
@@ -624,7 +692,6 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
             End If
             Err.Clear
         ElseIf startChanged And finishChanged And Not durationChanged Then
-            ' Date window moved; apply Start then Finish. Skip stale Duration.
             t.Start = newStart
             If Err.Number = 0 Then
                 dateChanges = dateChanges + 1
@@ -652,7 +719,6 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
             End If
             Err.Clear
         ElseIf finishChanged And durationChanged And Not startChanged Then
-            ' Prefer Duration (drives Finish) when both finish+duration changed.
             t.Duration = newDurMin
             If Err.Number = 0 Then
                 durChanges = durChanges + 1
@@ -660,7 +726,6 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
             End If
             Err.Clear
         ElseIf startChanged And finishChanged And durationChanged Then
-            ' All three present — Start + Duration; skip Finish to avoid fighting.
             t.Start = newStart
             If Err.Number = 0 Then
                 dateChanges = dateChanges + 1
@@ -675,6 +740,7 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
             Err.Clear
         End If
     End If
+AfterScheduleApply:
     On Error GoTo 0
 
     ' Leaf-only % Complete — summaries roll up from children.
@@ -1242,9 +1308,28 @@ Private Function ExcelValueHasTime(ByVal raw As Variant) As Boolean
     End If
 End Function
 
+Private Function ProjectDefaultStartTime() As Date
+    On Error Resume Next
+    ProjectDefaultStartTime = ActiveProject.DefaultStartTime
+    If Err.Number <> 0 Or TimeValue(ProjectDefaultStartTime) = 0 Then
+        Err.Clear
+        ProjectDefaultStartTime = TimeSerial(8, 0, 0)
+    End If
+End Function
+
+Private Function ProjectDefaultEndTime() As Date
+    On Error Resume Next
+    ProjectDefaultEndTime = ActiveProject.DefaultEndTime
+    If Err.Number <> 0 Or TimeValue(ProjectDefaultEndTime) = 0 Then
+        Err.Clear
+        ProjectDefaultEndTime = TimeSerial(17, 0, 0)
+    End If
+End Function
+
 ' Build a Project datetime from an Excel cell: keep explicit times; for
-' date-only (midnight) cells use ActiveProject.DefaultStartTime / DefaultEndTime
-' with 08:00 / 17:00 fallback (sample calendar).
+' date-only (midnight) cells use DefaultStartTime (isFinish=False) or
+' DefaultEndTime (isFinish=True). Callers must pass isFinish=False for
+' milestones so Duration 0 stays a single working instant (not 08:00–17:00).
 Private Function ExcelCellToProjectDate(ByVal raw As Variant, ByVal isFinish As Boolean, _
                                         ByRef outDate As Date) As Boolean
     Dim d As Date
@@ -1266,19 +1351,10 @@ Private Function ExcelCellToProjectDate(ByVal raw As Variant, ByVal isFinish As 
         Exit Function
     End If
 
-    Err.Clear
     If isFinish Then
-        defT = ActiveProject.DefaultEndTime
+        defT = ProjectDefaultEndTime()
     Else
-        defT = ActiveProject.DefaultStartTime
-    End If
-    If Err.Number <> 0 Or TimeValue(defT) = 0 Then
-        Err.Clear
-        If isFinish Then
-            defT = TimeSerial(17, 0, 0)
-        Else
-            defT = TimeSerial(8, 0, 0)
-        End If
+        defT = ProjectDefaultStartTime()
     End If
 
     outDate = DateValue(d) + TimeValue(defT)
