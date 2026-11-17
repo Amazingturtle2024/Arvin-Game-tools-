@@ -1,21 +1,26 @@
 '==============================================================================
-' ThisProject — MS Project ↔ Excel progress sync
+' ThisProject — MS Project ↔ Excel full two-way schedule sync
 '
-' Daily use: EditProgressInExcel (export → edit in Excel → auto-import).
-' ExportProgressToExcel / ImportProgressFromExcel remain for split workflows.
+' Daily use: EditScheduleInExcel (alias: EditProgressInExcel)
+'   export → open Excel → wait until close → import (edits + new rows).
 '
-' UniqueID is the only safe join key (duplicate leaf names are common).
+' Syncs: Task Name, Start, Finish, Duration (days), % Complete.
+' New Excel rows (blank UniqueID + name) create tasks in Project.
+' Deletes only when Delete=Y — missing UniqueIDs are kept, never wiped.
+' UniqueID is the join key (duplicate names are normal).
+'
 ' Late-bound Excel.Application — no Excel library reference required.
-' (Early-bound alternative: Tools > References > Microsoft Excel Object Library)
 '
-' Note: Run inside Microsoft Project on Windows. Not executed against the
-' .mpp on Linux.
-'
-' Paste tip: use docs/ThisProject-paste.bas (no VERSION/Attribute header) when
-' pasting into an existing ThisProject module — those lines cause compile errors.
+' Paste tip: use docs/ThisProject-paste.bas (no VERSION/Attribute header).
 '==============================================================================
 
 Option Explicit
+
+#If VBA7 Then
+Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#Else
+Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#End If
 
 '--- Config -------------------------------------------------------------------
 Private Const PROGRESS_SHEET_NAME As String = "Progress"
@@ -27,21 +32,29 @@ Private Const COL_WBS As Long = 3
 Private Const COL_OUTLINE As Long = 4
 Private Const COL_START As Long = 5
 Private Const COL_FINISH As Long = 6
-Private Const COL_PCT As Long = 7
-Private Const COL_SUMMARY As Long = 8
+Private Const COL_DURATION As Long = 7   ' working days (export/import)
+Private Const COL_PCT As Long = 8
+Private Const COL_SUMMARY As Long = 9   ' Y/N guide (export); not written back
+Private Const COL_DELETE As Long = 10  ' set Y to delete that UniqueID on import
 
 Private Const HEADER_ROW As Long = 1
 Private Const FIRST_DATA_ROW As Long = 2
+Private Const LAST_COL As Long = 10
 
-' EditProgressInExcel wait loop: prompt every N minutes; hard stop after this.
 Private Const EDIT_WAIT_PROMPT_MINUTES As Double = 5
 Private Const EDIT_WAIT_MAX_MINUTES As Double = 90
+Private Const EDIT_WAIT_SLEEP_MS As Long = 400
 
 '------------------------------------------------------------------------------
 ' Public entry points
 '------------------------------------------------------------------------------
 
-' Combined flow: export → open Excel for editing → wait for close → import.
+' Preferred daily name.
+Public Sub EditScheduleInExcel()
+    EditProgressInExcel
+End Sub
+
+' Combined flow: export → open Excel → wait for close → full import.
 Public Sub EditProgressInExcel()
     On Error GoTo Fail
 
@@ -56,13 +69,13 @@ Public Sub EditProgressInExcel()
     Dim errDesc As String
 
     If ActiveProject Is Nothing Then
-        MsgBox "No project is open.", vbExclamation, "Edit Progress"
+        MsgBox "No project is open.", vbExclamation, "Edit Schedule"
         Exit Sub
     End If
 
     CountProjectTasks taskCount, leafCount, summaryCount
     If taskCount = 0 Then
-        MsgBox "This project has no tasks to export.", vbExclamation, "Edit Progress"
+        MsgBox "This project has no tasks to export.", vbExclamation, "Edit Schedule"
         Exit Sub
     End If
 
@@ -74,7 +87,7 @@ Public Sub EditProgressInExcel()
         Application.StatusBar = False
         MsgBox "Export failed:" & vbCrLf & errDesc & _
                IIf(errNum <> 0, " (Error " & CStr(errNum) & ")", ""), _
-               vbCritical, "Edit Progress"
+               vbCritical, "Edit Schedule"
         Exit Sub
     End If
 
@@ -87,39 +100,43 @@ Public Sub EditProgressInExcel()
     xlApp.DisplayAlerts = True
     Set xlBook = xlApp.Workbooks.Open(excelPath)
 
-    Application.StatusBar = "Edit % Complete in Excel, save, then close Excel…"
-    MsgBox "Progress workbook is open in Excel:" & vbCrLf & excelPath & vbCrLf & vbCrLf & _
+    Application.StatusBar = "Edit schedule in Excel, save, then close Excel…"
+    MsgBox "Schedule workbook is open in Excel:" & vbCrLf & excelPath & vbCrLf & vbCrLf & _
            "Exported " & CStr(taskCount) & " task(s) (" & CStr(leafCount) & " leaf / " & _
            CStr(summaryCount) & " summary)." & vbCrLf & vbCrLf & _
-           "1. Filter Summary = N if helpful" & vbCrLf & _
-           "2. Edit % Complete on leaf rows only (grey summary rows are locked)" & vbCrLf & _
-           "3. Save the workbook (Ctrl+S)" & vbCrLf & _
-           "4. Close Excel" & vbCrLf & vbCrLf & _
-           "Click OK — Project will wait until Excel is closed, then import automatically.", _
-           vbInformation, "Edit Progress in Excel"
+           "Edit freely:" & vbCrLf & _
+           "• Task Name, Start, Finish, Duration (days), % Complete" & vbCrLf & _
+           "• New row with blank UniqueID + Task Name = new task in Project" & vbCrLf & _
+           "• Delete=Y on a row = delete that task (only — missing rows are kept)" & vbCrLf & _
+           "• Filter Summary=N for leaf % edits (summaries roll up)" & vbCrLf & vbCrLf & _
+           "Save (Ctrl+S), then close Excel. Click OK — Project waits, then imports.", _
+           vbInformation, "Edit Schedule in Excel"
 
     cancelled = False
     If Not WaitUntilExcelClosed(xlApp, xlBook, excelPath, cancelled) Then
         Application.StatusBar = False
-        CleanupExcel xlApp, xlBook
         If cancelled Then
-            MsgBox "Edit cancelled — nothing was imported." & vbCrLf & _
-                   "Run ImportProgressFromExcel later if you already saved the workbook.", _
-                   vbExclamation, "Edit Progress"
+            ' Leave Excel open with the user's workbook — do NOT Close/Quit.
+            ReleaseExcelRefs xlApp, xlBook
+            MsgBox "Import skipped. Excel was left open so you can keep editing." & vbCrLf & _
+                   "When ready, save & close Excel, then run ImportProgressFromExcel" & vbCrLf & _
+                   "(or run EditScheduleInExcel again).", _
+                   vbExclamation, "Edit Schedule"
+        Else
+            ReleaseExcelRefs xlApp, xlBook
         End If
         Exit Sub
     End If
 
     ' Workbook/process closed — drop stale refs; import opens its own Excel.
-    Set xlBook = Nothing
-    Set xlApp = Nothing
+    ReleaseExcelRefs xlApp, xlBook
 
-    Application.StatusBar = "Importing progress from Excel…"
-    If Not ApplyProgressFromWorkbook(excelPath, True, "Edit Progress", errNum, errDesc) Then
+    Application.StatusBar = "Importing schedule from Excel…"
+    If Not ApplyScheduleFromWorkbook(excelPath, True, "Edit Schedule", errNum, errDesc) Then
         Application.StatusBar = False
         MsgBox "Import failed:" & vbCrLf & errDesc & _
                IIf(errNum <> 0, " (Error " & CStr(errNum) & ")", ""), _
-               vbCritical, "Edit Progress"
+               vbCritical, "Edit Schedule"
         Exit Sub
     End If
 
@@ -130,13 +147,14 @@ Fail:
     errNum = Err.Number
     errDesc = Err.Description
     Application.StatusBar = False
+    ' Fail path may force-close a half-started automation instance only.
     CleanupExcel xlApp, xlBook
-    MsgBox "Edit Progress failed:" & vbCrLf & errDesc & _
+    MsgBox "Edit Schedule failed:" & vbCrLf & errDesc & _
            IIf(errNum <> 0, " (Error " & CStr(errNum) & ")", ""), _
-           vbCritical, "Edit Progress"
+           vbCritical, "Edit Schedule"
 End Sub
 
-' Standalone export only (does not open Excel — use EditProgressInExcel for the automatic round-trip).
+' Standalone export only (does not open Excel).
 Public Sub ExportProgressToExcel()
     On Error GoTo Fail
 
@@ -148,13 +166,13 @@ Public Sub ExportProgressToExcel()
     Dim errDesc As String
 
     If ActiveProject Is Nothing Then
-        MsgBox "No project is open.", vbExclamation, "Export Progress"
+        MsgBox "No project is open.", vbExclamation, "Export Schedule"
         Exit Sub
     End If
 
     CountProjectTasks taskCount, leafCount, summaryCount
     If taskCount = 0 Then
-        MsgBox "This project has no tasks to export.", vbExclamation, "Export Progress"
+        MsgBox "This project has no tasks to export.", vbExclamation, "Export Schedule"
         Exit Sub
     End If
 
@@ -166,18 +184,17 @@ Public Sub ExportProgressToExcel()
         Application.StatusBar = False
         MsgBox "Export failed:" & vbCrLf & errDesc & _
                IIf(errNum <> 0, " (Error " & CStr(errNum) & ")", ""), _
-               vbCritical, "Export Progress"
+               vbCritical, "Export Schedule"
         Exit Sub
     End If
     Application.StatusBar = False
 
     MsgBox "Exported " & CStr(taskCount) & " task(s) to:" & vbCrLf & excelPath & vbCrLf & vbCrLf & _
-           "Leaf tasks (edit % Complete): " & CStr(leafCount) & vbCrLf & _
-           "Summary tasks (rolled up — % locked): " & CStr(summaryCount) & vbCrLf & vbCrLf & _
-           "Tip: for a one-step edit+import, run EditProgressInExcel instead." & vbCrLf & _
+           "Leaf: " & CStr(leafCount) & " · Summary: " & CStr(summaryCount) & vbCrLf & vbCrLf & _
+           "Tip: run EditScheduleInExcel for export → edit → auto-import." & vbCrLf & _
            "Or edit this file, then run ImportProgressFromExcel." & vbCrLf & _
-           "Keep UniqueID intact (hidden column A) — names alone are not unique.", _
-           vbInformation, "Export Progress"
+           "UniqueID (column A, hidden) is the join key — do not clear existing IDs.", _
+           vbInformation, "Export Schedule"
     Exit Sub
 
 Fail:
@@ -186,7 +203,7 @@ Fail:
     Application.StatusBar = False
     MsgBox "Export failed:" & vbCrLf & errDesc & _
            IIf(errNum <> 0, " (Error " & CStr(errNum) & ")", ""), _
-           vbCritical, "Export Progress"
+           vbCritical, "Export Schedule"
 End Sub
 
 Public Sub ImportProgressFromExcel()
@@ -195,7 +212,7 @@ Public Sub ImportProgressFromExcel()
     Dim errDesc As String
 
     If ActiveProject Is Nothing Then
-        MsgBox "No project is open.", vbExclamation, "Import Progress"
+        MsgBox "No project is open.", vbExclamation, "Import Schedule"
         Exit Sub
     End If
 
@@ -203,23 +220,23 @@ Public Sub ImportProgressFromExcel()
     If Len(excelPath) = 0 Then Exit Sub
 
     If Dir(excelPath) = "" Then
-        MsgBox "Excel file not found:" & vbCrLf & excelPath, vbExclamation, "Import Progress"
+        MsgBox "Excel file not found:" & vbCrLf & excelPath, vbExclamation, "Import Schedule"
         Exit Sub
     End If
 
-    Application.StatusBar = "Importing progress from Excel..."
-    If Not ApplyProgressFromWorkbook(excelPath, True, "Import Progress", errNum, errDesc) Then
+    Application.StatusBar = "Importing schedule from Excel..."
+    If Not ApplyScheduleFromWorkbook(excelPath, True, "Import Schedule", errNum, errDesc) Then
         Application.StatusBar = False
         MsgBox "Import failed:" & vbCrLf & errDesc & _
                IIf(errNum <> 0, " (Error " & CStr(errNum) & ")", ""), _
-               vbCritical, "Import Progress"
+               vbCritical, "Import Schedule"
         Exit Sub
     End If
     Application.StatusBar = False
 End Sub
 
 '------------------------------------------------------------------------------
-' Core export / import (shared)
+' Core export / import
 '------------------------------------------------------------------------------
 
 Private Sub CountProjectTasks(ByRef taskCount As Long, ByRef leafCount As Long, ByRef summaryCount As Long)
@@ -239,7 +256,6 @@ Private Sub CountProjectTasks(ByRef taskCount As Long, ByRef leafCount As Long, 
     Next t
 End Sub
 
-' Writes/saves the Progress workbook with a hidden Excel instance, then quits it.
 Private Function WriteProgressWorkbook(ByVal excelPath As String, _
                                        ByRef errNum As Long, _
                                        ByRef errDesc As String) As Boolean
@@ -250,6 +266,7 @@ Private Function WriteProgressWorkbook(ByVal excelPath As String, _
     Dim xlSheet As Object
     Dim t As Task
     Dim row As Long
+    Dim hoursPerDay As Double
 
     Set xlApp = CreateExcelApp(False)
     If xlApp Is Nothing Then
@@ -258,6 +275,9 @@ Private Function WriteProgressWorkbook(ByVal excelPath As String, _
         WriteProgressWorkbook = False
         Exit Function
     End If
+
+    hoursPerDay = ActiveProject.HoursPerDay
+    If hoursPerDay <= 0 Then hoursPerDay = 8
 
     xlApp.DisplayAlerts = False
     Set xlBook = xlApp.Workbooks.Add
@@ -277,8 +297,11 @@ Private Function WriteProgressWorkbook(ByVal excelPath As String, _
             xlSheet.Cells(row, COL_OUTLINE).Value = t.OutlineLevel
             xlSheet.Cells(row, COL_START).Value = t.Start
             xlSheet.Cells(row, COL_FINISH).Value = t.Finish
+            ' Duration stored in minutes → working days
+            xlSheet.Cells(row, COL_DURATION).Value = Round(t.Duration / 60# / hoursPerDay, 2)
             xlSheet.Cells(row, COL_PCT).Value = t.PercentComplete
             xlSheet.Cells(row, COL_SUMMARY).Value = IIf(t.Summary, "Y", "N")
+            xlSheet.Cells(row, COL_DELETE).Value = ""
             row = row + 1
         End If
     Next t
@@ -304,8 +327,7 @@ Fail:
     WriteProgressWorkbook = False
 End Function
 
-' Reads the workbook and updates matching tasks. Returns False on hard failure.
-Private Function ApplyProgressFromWorkbook(ByVal excelPath As String, _
+Private Function ApplyScheduleFromWorkbook(ByVal excelPath As String, _
                                            ByVal showSummary As Boolean, _
                                            ByVal msgTitle As String, _
                                            ByRef errNum As Long, _
@@ -319,21 +341,31 @@ Private Function ApplyProgressFromWorkbook(ByVal excelPath As String, _
     Dim row As Long
     Dim uid As Long
     Dim t As Task
-    Dim newPct As Double
     Dim excelName As String
-    Dim updated As Long
-    Dim skippedSummary As Long
-    Dim missing As Long
-    Dim nameChanges As Long
-    Dim unchanged As Long
     Dim rawUid As Variant
-    Dim rawPct As Variant
+    Dim deleteFlag As String
+    Dim updated As Long
+    Dim created As Long
+    Dim deleted As Long
+    Dim skippedSummaryPct As Long
+    Dim missing As Long
+    Dim keptNotInExcel As Long
+    Dim nameChanges As Long
+    Dim dateChanges As Long
+    Dim durChanges As Long
+    Dim pctChanges As Long
+    Dim excelUids As Object
+    Dim hoursPerDay As Double
+
+    Set excelUids = CreateObject("Scripting.Dictionary")
+    hoursPerDay = ActiveProject.HoursPerDay
+    If hoursPerDay <= 0 Then hoursPerDay = 8
 
     Set xlApp = CreateExcelApp(False)
     If xlApp Is Nothing Then
         errNum = 0
         errDesc = "Microsoft Excel is not installed or could not be started."
-        ApplyProgressFromWorkbook = False
+        ApplyScheduleFromWorkbook = False
         Exit Function
     End If
 
@@ -348,73 +380,91 @@ Private Function ApplyProgressFromWorkbook(ByVal excelPath As String, _
         CleanupExcel xlApp, xlBook
         errNum = 0
         errDesc = "Sheet '" & PROGRESS_SHEET_NAME & "' was not found in:" & vbCrLf & excelPath
-        ApplyProgressFromWorkbook = False
+        ApplyScheduleFromWorkbook = False
         Exit Function
     End If
 
-    lastRow = xlSheet.Cells(xlSheet.Rows.Count, COL_UNIQUE_ID).End(-4162).row ' xlUp
+    lastRow = xlSheet.Cells(xlSheet.Rows.Count, COL_TASK_NAME).End(-4162).row ' xlUp
+    If lastRow < FIRST_DATA_ROW Then
+        ' Also try UniqueID column in case names cleared
+        lastRow = xlSheet.Cells(xlSheet.Rows.Count, COL_UNIQUE_ID).End(-4162).row
+    End If
     If lastRow < FIRST_DATA_ROW Then
         CleanupExcel xlApp, xlBook
         errNum = 0
         errDesc = "No task rows found on sheet '" & PROGRESS_SHEET_NAME & "'."
-        ApplyProgressFromWorkbook = False
+        ApplyScheduleFromWorkbook = False
         Exit Function
     End If
 
-    ' Leaf-only % Complete: Project rejects PercentComplete writes on summary
-    ' tasks (they roll up from children). Skip summaries for % Complete but
-    ' still allow Task Name updates on any matched UniqueID. New tasks are
-    ' never created — unmatched UniqueIDs are counted as missing.
     updated = 0
-    skippedSummary = 0
+    created = 0
+    deleted = 0
+    skippedSummaryPct = 0
     missing = 0
+    keptNotInExcel = 0
     nameChanges = 0
-    unchanged = 0
+    dateChanges = 0
+    durChanges = 0
+    pctChanges = 0
 
+    ' Pass 1: deletes + updates + creates
     For row = FIRST_DATA_ROW To lastRow
-        rawUid = xlSheet.Cells(row, COL_UNIQUE_ID).Value
-        If IsBlank(rawUid) Then GoTo NextRow
-        If Not IsNumeric(rawUid) Then GoTo NextRow
-
-        uid = CLng(rawUid)
-        Set t = FindTaskByUniqueID(uid)
-        If t Is Nothing Then
-            missing = missing + 1
-            GoTo NextRow
-        End If
-
-        ' Optional Task Name sync — only when Trimmed content actually differs
-        ' (do not rewrite names solely to strip existing leading/trailing spaces).
         excelName = CStr(xlSheet.Cells(row, COL_TASK_NAME).Value & "")
-        If Len(Trim$(excelName)) > 0 Then
-            If Trim$(t.Name) <> Trim$(excelName) Then
-                t.Name = Trim$(excelName)
-                nameChanges = nameChanges + 1
+        rawUid = xlSheet.Cells(row, COL_UNIQUE_ID).Value
+        deleteFlag = UCase$(Trim$(CStr(xlSheet.Cells(row, COL_DELETE).Value & "")))
+
+        ' Skip completely empty rows
+        If IsBlank(rawUid) And Len(Trim$(excelName)) = 0 And deleteFlag <> "Y" Then GoTo NextRow
+
+        If Not IsBlank(rawUid) And IsNumeric(rawUid) Then
+            uid = CLng(rawUid)
+            If Not excelUids.Exists(CStr(uid)) Then excelUids.Add CStr(uid), True
+
+            Set t = FindTaskByUniqueID(uid)
+            If t Is Nothing Then
+                missing = missing + 1
+                GoTo NextRow
             End If
-        End If
 
-        If t.Summary Then
-            skippedSummary = skippedSummary + 1
-            GoTo NextRow
-        End If
+            If deleteFlag = "Y" Then
+                ' Opt-in delete only — never delete merely because a row was removed.
+                If t.UniqueID = 0 Then
+                    ' Protect project summary task
+                    GoTo NextRow
+                End If
+                t.Delete
+                deleted = deleted + 1
+                GoTo NextRow
+            End If
 
-        rawPct = xlSheet.Cells(row, COL_PCT).Value
-        If IsBlank(rawPct) Then GoTo NextRow
-        If Not IsNumeric(rawPct) Then GoTo NextRow
-
-        newPct = CDbl(rawPct)
-        If newPct < 0 Then newPct = 0
-        If newPct > 100 Then newPct = 100
-
-        If t.PercentComplete <> newPct Then
-            t.PercentComplete = newPct
-            updated = updated + 1
+            ApplyTaskFieldsFromRow xlSheet, row, t, hoursPerDay, _
+                nameChanges, dateChanges, durChanges, pctChanges, skippedSummaryPct, updated
         Else
-            unchanged = unchanged + 1
+            ' Blank / non-numeric UniqueID → create new task if a name is present.
+            If Len(Trim$(excelName)) = 0 Then GoTo NextRow
+            If deleteFlag = "Y" Then GoTo NextRow ' nothing to delete
+
+            Set t = CreateTaskFromRow(xlSheet, row, hoursPerDay)
+            If Not t Is Nothing Then
+                created = created + 1
+                If Not excelUids.Exists(CStr(t.UniqueID)) Then excelUids.Add CStr(t.UniqueID), True
+            End If
         End If
 
 NextRow:
     Next row
+
+    ' Pass 2: Project tasks whose UniqueID is absent from Excel are KEPT
+    ' (not deleted). Count for the summary so intent is visible.
+    Dim pt As Task
+    For Each pt In ActiveProject.Tasks
+        If Not pt Is Nothing Then
+            If Not excelUids.Exists(CStr(pt.UniqueID)) Then
+                keptNotInExcel = keptNotInExcel + 1
+            End If
+        End If
+    Next pt
 
     xlBook.Close SaveChanges:=False
     xlApp.Quit
@@ -424,30 +474,227 @@ NextRow:
 
     If showSummary Then
         MsgBox "Import finished." & vbCrLf & vbCrLf & _
-               "% Complete updated: " & CStr(updated) & vbCrLf & _
-               "% Complete unchanged: " & CStr(unchanged) & vbCrLf & _
-               "Task names changed: " & CStr(nameChanges) & vbCrLf & _
-               "Summary tasks skipped for % Complete: " & CStr(skippedSummary) & vbCrLf & _
-               "UniqueID not found in Project: " & CStr(missing), _
+               "Tasks updated: " & CStr(updated) & vbCrLf & _
+               "  · names: " & CStr(nameChanges) & _
+               "  · dates: " & CStr(dateChanges) & _
+               "  · duration: " & CStr(durChanges) & _
+               "  · % Complete: " & CStr(pctChanges) & vbCrLf & _
+               "Tasks created: " & CStr(created) & vbCrLf & _
+               "Tasks deleted (Delete=Y): " & CStr(deleted) & vbCrLf & _
+               "Summary % Complete skipped: " & CStr(skippedSummaryPct) & vbCrLf & _
+               "UniqueID in Excel not found: " & CStr(missing) & vbCrLf & _
+               "Project tasks kept (not in Excel): " & CStr(keptNotInExcel) & vbCrLf & vbCrLf & _
+               "Note: rows missing from Excel are NOT deleted unless Delete=Y.", _
                vbInformation, msgTitle
     End If
 
-    ApplyProgressFromWorkbook = True
+    ApplyScheduleFromWorkbook = True
     Exit Function
 
 Fail:
     errNum = Err.Number
     errDesc = Err.Description
     CleanupExcel xlApp, xlBook
-    ApplyProgressFromWorkbook = False
+    ApplyScheduleFromWorkbook = False
+End Function
+
+Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, ByVal t As Task, _
+                                   ByVal hoursPerDay As Double, _
+                                   ByRef nameChanges As Long, ByRef dateChanges As Long, _
+                                   ByRef durChanges As Long, ByRef pctChanges As Long, _
+                                   ByRef skippedSummaryPct As Long, ByRef updated As Long)
+    Dim excelName As String
+    Dim rawStart As Variant
+    Dim rawFinish As Variant
+    Dim rawDur As Variant
+    Dim rawPct As Variant
+    Dim newPct As Double
+    Dim newDurMin As Double
+    Dim touched As Boolean
+
+    touched = False
+
+    excelName = CStr(xlSheet.Cells(row, COL_TASK_NAME).Value & "")
+    If Len(Trim$(excelName)) > 0 Then
+        If Trim$(t.Name) <> Trim$(excelName) Then
+            t.Name = Trim$(excelName)
+            nameChanges = nameChanges + 1
+            touched = True
+        End If
+    End If
+
+    rawStart = xlSheet.Cells(row, COL_START).Value
+    If Not IsBlank(rawStart) And IsDate(rawStart) Then
+        On Error Resume Next
+        If CDate(t.Start) <> CDate(rawStart) Then
+            t.Start = CDate(rawStart)
+            If Err.Number = 0 Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        End If
+        On Error GoTo 0
+    End If
+
+    rawFinish = xlSheet.Cells(row, COL_FINISH).Value
+    If Not IsBlank(rawFinish) And IsDate(rawFinish) Then
+        On Error Resume Next
+        If CDate(t.Finish) <> CDate(rawFinish) Then
+            t.Finish = CDate(rawFinish)
+            If Err.Number = 0 Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        End If
+        On Error GoTo 0
+    End If
+
+    rawDur = xlSheet.Cells(row, COL_DURATION).Value
+    If Not IsBlank(rawDur) And IsNumeric(rawDur) Then
+        newDurMin = CDbl(rawDur) * 60# * hoursPerDay
+        If newDurMin < 0 Then newDurMin = 0
+        On Error Resume Next
+        If Abs(t.Duration - newDurMin) > 0.5 Then
+            t.Duration = newDurMin
+            If Err.Number = 0 Then
+                durChanges = durChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        End If
+        On Error GoTo 0
+    End If
+
+    ' Leaf-only % Complete — summaries roll up from children.
+    If t.Summary Then
+        skippedSummaryPct = skippedSummaryPct + 1
+    Else
+        rawPct = xlSheet.Cells(row, COL_PCT).Value
+        If Not IsBlank(rawPct) And IsNumeric(rawPct) Then
+            newPct = CDbl(rawPct)
+            If newPct < 0 Then newPct = 0
+            If newPct > 100 Then newPct = 100
+            If t.PercentComplete <> newPct Then
+                t.PercentComplete = newPct
+                pctChanges = pctChanges + 1
+                touched = True
+            End If
+        End If
+    End If
+
+    If touched Then updated = updated + 1
+End Sub
+
+Private Function CreateTaskFromRow(ByVal xlSheet As Object, ByVal row As Long, _
+                                   ByVal hoursPerDay As Double) As Task
+    Dim t As Task
+    Dim excelName As String
+    Dim desiredOutline As Long
+    Dim rawOutline As Variant
+    Dim parentWbs As String
+    Dim parentTask As Task
+    Dim rawWbs As Variant
+
+    On Error GoTo FailCreate
+
+    excelName = Trim$(CStr(xlSheet.Cells(row, COL_TASK_NAME).Value & ""))
+    If Len(excelName) = 0 Then
+        Set CreateTaskFromRow = Nothing
+        Exit Function
+    End If
+
+    ' Prefer inserting under a parent matching Outline Level / WBS hint.
+    rawOutline = xlSheet.Cells(row, COL_OUTLINE).Value
+    desiredOutline = 1
+    If Not IsBlank(rawOutline) And IsNumeric(rawOutline) Then
+        desiredOutline = CLng(rawOutline)
+        If desiredOutline < 1 Then desiredOutline = 1
+    End If
+
+    rawWbs = xlSheet.Cells(row, COL_WBS).Value
+    parentWbs = Trim$(CStr(rawWbs & ""))
+    If Len(parentWbs) > 0 Then
+        ' If user typed a child WBS like 1.6.9, parent hint is 1.6
+        If InStrRev(parentWbs, ".") > 0 Then
+            parentWbs = Left$(parentWbs, InStrRev(parentWbs, ".") - 1)
+        Else
+            parentWbs = ""
+        End If
+    End If
+
+    Set parentTask = Nothing
+    If Len(parentWbs) > 0 Then Set parentTask = FindTaskByWBS(parentWbs)
+
+    If Not parentTask Is Nothing Then
+        ' Add after last child of parent when possible; else after parent.
+        Set t = ActiveProject.Tasks.Add(excelName, parentTask.ID + CountDescendants(parentTask) + 1)
+    Else
+        Set t = ActiveProject.Tasks.Add(excelName)
+    End If
+
+    AdjustOutlineLevel t, desiredOutline
+
+    ' Apply remaining fields (dates / duration / %).
+    Dim nc As Long, dc As Long, duc As Long, pc As Long, sk As Long, up As Long
+    ApplyTaskFieldsFromRow xlSheet, row, t, hoursPerDay, nc, dc, duc, pc, sk, up
+
+    Set CreateTaskFromRow = t
+    Exit Function
+
+FailCreate:
+    Set CreateTaskFromRow = Nothing
+End Function
+
+Private Function CountDescendants(ByVal parentTask As Task) As Long
+    Dim t As Task
+    Dim n As Long
+    n = 0
+    For Each t In ActiveProject.Tasks
+        If Not t Is Nothing Then
+            If t.ID > parentTask.ID Then
+                If t.OutlineLevel <= parentTask.OutlineLevel Then Exit For
+                n = n + 1
+            End If
+        End If
+    Next t
+    CountDescendants = n
+End Function
+
+Private Sub AdjustOutlineLevel(ByVal t As Task, ByVal desired As Long)
+    Dim guard As Long
+    On Error Resume Next
+    guard = 0
+    Do While t.OutlineLevel < desired And guard < 20
+        t.OutlineIndent
+        guard = guard + 1
+    Loop
+    guard = 0
+    Do While t.OutlineLevel > desired And guard < 20
+        t.OutlineOutdent
+        guard = guard + 1
+    Loop
+    On Error GoTo 0
+End Sub
+
+Private Function FindTaskByWBS(ByVal wbs As String) As Task
+    Dim t As Task
+    For Each t In ActiveProject.Tasks
+        If Not t Is Nothing Then
+            If StrComp(Trim$(CStr(t.WBS & "")), Trim$(wbs), vbTextCompare) = 0 Then
+                Set FindTaskByWBS = t
+                Exit Function
+            End If
+        End If
+    Next t
+    Set FindTaskByWBS = Nothing
 End Function
 
 '------------------------------------------------------------------------------
 ' Edit-session wait helpers
 '------------------------------------------------------------------------------
 
-' Returns True when the edit workbook/process is closed (ready to import).
-' Returns False if the user cancels while waiting.
 Private Function WaitUntilExcelClosed(ByVal xlApp As Object, _
                                       ByVal xlBook As Object, _
                                       ByVal excelPath As String, _
@@ -462,7 +709,9 @@ Private Function WaitUntilExcelClosed(ByVal xlApp As Object, _
     lastPrompt = Now
 
     Do
+        Sleep EDIT_WAIT_SLEEP_MS
         DoEvents
+
         stillOpen = IsProgressSessionOpen(xlApp, xlBook, excelPath)
         If Not stillOpen Then
             WaitUntilExcelClosed = True
@@ -472,8 +721,8 @@ Private Function WaitUntilExcelClosed(ByVal xlApp As Object, _
         If DateDiff("n", lastPrompt, Now) >= EDIT_WAIT_PROMPT_MINUTES Then
             resp = MsgBox("Still waiting for you to save and close Excel…" & vbCrLf & vbCrLf & _
                           "Yes = keep waiting" & vbCrLf & _
-                          "No = cancel (skip automatic import)", _
-                          vbYesNo Or vbQuestion, "Edit Progress")
+                          "No = skip automatic import (Excel stays open)", _
+                          vbYesNo Or vbQuestion, "Edit Schedule")
             lastPrompt = Now
             If resp = vbNo Then
                 cancelled = True
@@ -485,8 +734,8 @@ Private Function WaitUntilExcelClosed(ByVal xlApp As Object, _
         If DateDiff("n", waitStart, Now) >= EDIT_WAIT_MAX_MINUTES Then
             resp = MsgBox("Timed out after " & CStr(EDIT_WAIT_MAX_MINUTES) & " minutes." & vbCrLf & vbCrLf & _
                           "Yes = keep waiting another " & CStr(EDIT_WAIT_MAX_MINUTES) & " minutes" & vbCrLf & _
-                          "No = cancel (skip automatic import)", _
-                          vbYesNo Or vbExclamation, "Edit Progress")
+                          "No = skip automatic import (Excel stays open)", _
+                          vbYesNo Or vbExclamation, "Edit Schedule")
             If resp = vbNo Then
                 cancelled = True
                 WaitUntilExcelClosed = False
@@ -504,46 +753,135 @@ Private Function IsProgressSessionOpen(ByVal xlApp As Object, _
     Dim wb As Object
     Dim n As Long
     Dim fullName As String
+    Dim errN As Long
 
     On Error Resume Next
-
-    ' If our workbook object is gone / Excel quit, session is closed.
-    If xlBook Is Nothing Then
-        ' fall through to app/path check
-    Else
-        fullName = xlBook.FullName
-        If Err.Number <> 0 Then
-            Err.Clear
-            IsProgressSessionOpen = False
-            Exit Function
-        End If
-    End If
 
     If xlApp Is Nothing Then
         IsProgressSessionOpen = False
         Exit Function
     End If
 
+    ' Probe application. While a cell is being edited, Excel often returns 1004
+    ' to automation — that means STILL OPEN, not closed.
+    Err.Clear
     n = xlApp.Workbooks.Count
-    If Err.Number <> 0 Then
+    errN = Err.Number
+    If errN <> 0 Then
         Err.Clear
-        IsProgressSessionOpen = False
+        If IsExcelBusyOrTransientError(errN) Then
+            IsProgressSessionOpen = True
+        Else
+            IsProgressSessionOpen = False
+        End If
         Exit Function
     End If
 
+    ' Prefer workbook object FullName when readable.
+    If Not xlBook Is Nothing Then
+        Err.Clear
+        fullName = xlBook.FullName
+        errN = Err.Number
+        If errN <> 0 Then
+            Err.Clear
+            If IsExcelBusyOrTransientError(errN) Then
+                IsProgressSessionOpen = True
+                Exit Function
+            End If
+            ' Fall through to collection scan
+        ElseIf PathsReferToSameWorkbook(fullName, excelPath) Then
+            IsProgressSessionOpen = True
+            Exit Function
+        End If
+    End If
+
+    ' Scan open workbooks — match full path OR filename (OneDrive URL vs local).
+    Err.Clear
     For Each wb In xlApp.Workbooks
-        If StrComp(wb.FullName, excelPath, vbTextCompare) = 0 Then
+        Err.Clear
+        fullName = wb.FullName
+        errN = Err.Number
+        If errN <> 0 Then
+            Err.Clear
+            If IsExcelBusyOrTransientError(errN) Then
+                IsProgressSessionOpen = True
+                Exit Function
+            End If
+        Else
+            If PathsReferToSameWorkbook(fullName, excelPath) Then
+                IsProgressSessionOpen = True
+                Exit Function
+            End If
+        End If
+        ' Filename fallback
+        Err.Clear
+        If StrComp(wb.Name, FileNameOnly(excelPath), vbTextCompare) = 0 Then
             IsProgressSessionOpen = True
             Exit Function
         End If
     Next wb
 
-    ' Workbook closed but Excel may still be running empty — quit our instance.
+    ' No matching workbook. If Excel has zero books, quit our empty instance.
     If n = 0 Then
+        Err.Clear
         xlApp.DisplayAlerts = False
         xlApp.Quit
     End If
     IsProgressSessionOpen = False
+End Function
+
+Private Function IsExcelBusyOrTransientError(ByVal errN As Long) As Boolean
+    ' 1004 = application-defined / often "Excel is busy" during in-cell edit
+    ' -2147417848 (0x80010108) RPC disconnected call — sometimes transient
+    ' -2147418111 (0x80010001) RPC_E_CALL_REJECTED — Excel rejecting re-entrancy
+    ' -2146777998 (0x800AC472) VBA_E_IGNORE — Excel ignoring calls while UI busy
+    Select Case errN
+        Case 1004, -2147417848, -2147418111, -2146777998
+            IsExcelBusyOrTransientError = True
+        Case Else
+            IsExcelBusyOrTransientError = False
+    End Select
+End Function
+
+Private Function PathsReferToSameWorkbook(ByVal pathA As String, ByVal pathB As String) As Boolean
+    Dim a As String
+    Dim b As String
+    a = Trim$(pathA)
+    b = Trim$(pathB)
+    If Len(a) = 0 Or Len(b) = 0 Then Exit Function
+
+    If StrComp(a, b, vbTextCompare) = 0 Then
+        PathsReferToSameWorkbook = True
+        Exit Function
+    End If
+
+    ' Filename-only match (OneDrive/SharePoint FullName vs local path).
+    If StrComp(FileNameOnly(a), FileNameOnly(b), vbTextCompare) = 0 Then
+        PathsReferToSameWorkbook = True
+        Exit Function
+    End If
+
+    ' Normalize backslashes / forward slashes for a softer compare
+    a = Replace(LCase$(a), "/", "\")
+    b = Replace(LCase$(b), "/", "\")
+    If a = b Then
+        PathsReferToSameWorkbook = True
+        Exit Function
+    End If
+
+    PathsReferToSameWorkbook = False
+End Function
+
+Private Function FileNameOnly(ByVal path As String) As String
+    Dim p As Long
+    Dim s As String
+    s = Replace(path, "/", "\")
+    p = InStrRev(s, "\")
+    If p = 0 Then
+        FileNameOnly = s
+    Else
+        FileNameOnly = Mid$(s, p + 1)
+    End If
 End Function
 
 '------------------------------------------------------------------------------
@@ -562,16 +900,16 @@ Private Function ResolveExcelPath(ByVal mustExist As Boolean) As String
 
     If mustExist Then
         If Dir(path) = "" Then
-            prompt = "Excel progress file not found at default path." & vbCrLf & _
+            prompt = "Excel schedule file not found at default path." & vbCrLf & _
                      "Enter full path to the workbook:"
-            path = InputBox(prompt, "Import Progress", path)
+            path = InputBox(prompt, "Import Schedule", path)
             If Len(Trim$(path)) = 0 Then
                 ResolveExcelPath = ""
                 Exit Function
             End If
         End If
     Else
-        path = InputBox("Export workbook path (edit if needed):", "Progress Excel Path", path)
+        path = InputBox("Workbook path (edit if needed):", "Schedule Excel Path", path)
         If Len(Trim$(path)) = 0 Then
             ResolveExcelPath = ""
             Exit Function
@@ -595,6 +933,7 @@ Private Function CreateExcelApp(Optional ByVal visible As Boolean = False) As Ob
     End If
 End Function
 
+' Force-close (error paths / hidden automation only).
 Private Sub CleanupExcel(ByRef xlApp As Object, ByRef xlBook As Object)
     On Error Resume Next
     If Not xlBook Is Nothing Then xlBook.Close SaveChanges:=False
@@ -604,6 +943,12 @@ Private Sub CleanupExcel(ByRef xlApp As Object, ByRef xlBook As Object)
     On Error GoTo 0
 End Sub
 
+' Drop COM refs without closing the user's visible Excel session.
+Private Sub ReleaseExcelRefs(ByRef xlApp As Object, ByRef xlBook As Object)
+    Set xlBook = Nothing
+    Set xlApp = Nothing
+End Sub
+
 Private Sub WriteHeaderRow(ByVal xlSheet As Object)
     xlSheet.Cells(HEADER_ROW, COL_UNIQUE_ID).Value = "UniqueID"
     xlSheet.Cells(HEADER_ROW, COL_TASK_NAME).Value = "Task Name"
@@ -611,8 +956,10 @@ Private Sub WriteHeaderRow(ByVal xlSheet As Object)
     xlSheet.Cells(HEADER_ROW, COL_OUTLINE).Value = "Outline Level"
     xlSheet.Cells(HEADER_ROW, COL_START).Value = "Start"
     xlSheet.Cells(HEADER_ROW, COL_FINISH).Value = "Finish"
+    xlSheet.Cells(HEADER_ROW, COL_DURATION).Value = "Duration (days)"
     xlSheet.Cells(HEADER_ROW, COL_PCT).Value = "% Complete"
     xlSheet.Cells(HEADER_ROW, COL_SUMMARY).Value = "Summary"
+    xlSheet.Cells(HEADER_ROW, COL_DELETE).Value = "Delete"
 End Sub
 
 Private Sub FormatProgressSheet(ByVal xlSheet As Object, ByVal lastDataRow As Long)
@@ -620,13 +967,15 @@ Private Sub FormatProgressSheet(ByVal xlSheet As Object, ByVal lastDataRow As Lo
     Dim isSummary As Boolean
 
     With xlSheet.Range(xlSheet.Cells(HEADER_ROW, COL_UNIQUE_ID), _
-                       xlSheet.Cells(HEADER_ROW, COL_SUMMARY))
+                       xlSheet.Cells(HEADER_ROW, LAST_COL))
         .Font.Bold = True
     End With
 
     If lastDataRow >= FIRST_DATA_ROW Then
         xlSheet.Range(xlSheet.Cells(FIRST_DATA_ROW, COL_START), _
                       xlSheet.Cells(lastDataRow, COL_FINISH)).NumberFormat = "yyyy-mm-dd"
+        xlSheet.Range(xlSheet.Cells(FIRST_DATA_ROW, COL_DURATION), _
+                      xlSheet.Cells(lastDataRow, COL_DURATION)).NumberFormat = "0.00"
         xlSheet.Range(xlSheet.Cells(FIRST_DATA_ROW, COL_PCT), _
                       xlSheet.Cells(lastDataRow, COL_PCT)).NumberFormat = "0"
     End If
@@ -638,6 +987,7 @@ Private Sub FormatProgressSheet(ByVal xlSheet As Object, ByVal lastDataRow As Lo
 
     xlSheet.Columns(COL_UNIQUE_ID).Hidden = True
     xlSheet.Columns(COL_SUMMARY).Hidden = False
+    xlSheet.Columns(COL_DELETE).Hidden = False
 
     If lastDataRow >= FIRST_DATA_ROW Then
         xlSheet.Cells.Locked = False
@@ -645,29 +995,34 @@ Private Sub FormatProgressSheet(ByVal xlSheet As Object, ByVal lastDataRow As Lo
         xlSheet.Range(xlSheet.Cells(FIRST_DATA_ROW, COL_UNIQUE_ID), _
                       xlSheet.Cells(lastDataRow, COL_UNIQUE_ID)).Locked = True
         xlSheet.Range(xlSheet.Cells(FIRST_DATA_ROW, COL_WBS), _
-                      xlSheet.Cells(lastDataRow, COL_FINISH)).Locked = True
+                      xlSheet.Cells(lastDataRow, COL_WBS)).Locked = True
         xlSheet.Range(xlSheet.Cells(FIRST_DATA_ROW, COL_SUMMARY), _
                       xlSheet.Cells(lastDataRow, COL_SUMMARY)).Locked = True
         xlSheet.Range(xlSheet.Cells(HEADER_ROW, COL_UNIQUE_ID), _
-                      xlSheet.Cells(HEADER_ROW, COL_SUMMARY)).Locked = True
+                      xlSheet.Cells(HEADER_ROW, LAST_COL)).Locked = True
 
+        ' Editable: Name, Outline, Start, Finish, Duration, %, Delete
         For r = FIRST_DATA_ROW To lastDataRow
             isSummary = (UCase$(Trim$(CStr(xlSheet.Cells(r, COL_SUMMARY).Value & ""))) = "Y")
+            xlSheet.Cells(r, COL_TASK_NAME).Locked = False
+            xlSheet.Cells(r, COL_OUTLINE).Locked = False
+            xlSheet.Cells(r, COL_START).Locked = False
+            xlSheet.Cells(r, COL_FINISH).Locked = False
+            xlSheet.Cells(r, COL_DURATION).Locked = False
+            xlSheet.Cells(r, COL_DELETE).Locked = False
             If isSummary Then
                 xlSheet.Cells(r, COL_PCT).Locked = True
                 xlSheet.Range(xlSheet.Cells(r, COL_TASK_NAME), _
                               xlSheet.Cells(r, COL_SUMMARY)).Interior.Color = RGB(242, 242, 242)
             Else
                 xlSheet.Cells(r, COL_PCT).Locked = False
-                xlSheet.Cells(r, COL_TASK_NAME).Locked = False
             End If
         Next r
     End If
 
     On Error Resume Next
     xlSheet.Range(xlSheet.Cells(HEADER_ROW, COL_UNIQUE_ID), _
-                  xlSheet.Cells(lastDataRow, COL_SUMMARY)).AutoFilter
-    ' AllowFiltering/AllowSorting so Summary=N filter works while protected.
+                  xlSheet.Cells(lastDataRow, LAST_COL)).AutoFilter
     ' Do not Activate/Select — hidden Excel Select raises 1004 before SaveAs.
     xlSheet.Protect Password:="", DrawingObjects:=True, Contents:=True, Scenarios:=True, _
                     UserInterfaceOnly:=True, AllowFiltering:=True, AllowSorting:=True
