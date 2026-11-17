@@ -34,7 +34,8 @@ Round-trip **any** open `.mpp` with Excel: names, dates, duration, `% Complete`,
 ### Deletes (safe by default)
 
 - Rows **missing** from Excel are **kept** in Project (counted as “kept, not in Excel”).
-- To delete: set **Delete=Y** on that row, save, import.
+- To delete a leaf: set **Delete=Y** on that row, save, import.
+- To delete a **summary**: set **Delete=Y** on the summary **and every child**. Otherwise the summary is skipped (reported in the import MsgBox) so unmarked children are not wiped.
 - Never silently wipe the programme.
 
 ### Project → Excel
@@ -73,4 +74,6 @@ Offline OLE/MPXJ read (not Microsoft Project on Linux): 257 tasks, 177 leaf / 80
 | Wait ended while still editing a cell | Busy/1004 treated as still open; path match is case-insensitive with filename fallback (OneDrive). |
 | Summaries % skipped | Expected — edit leaf % only. |
 | Task not deleted after removing a row | Expected — use Delete=Y. |
+| Summary Delete skipped | Mark Delete=Y on the summary and all children. |
+| Dates reverted after import | Change either dates or duration intentionally; import won’t reapply a stale Duration after date edits. |
 | Date/duration rejected | Project constraints/calendars may block some writes; check the task in Project. |

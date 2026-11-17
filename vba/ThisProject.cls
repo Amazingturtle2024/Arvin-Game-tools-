@@ -363,10 +363,13 @@ Private Function ApplyScheduleFromWorkbook(ByVal excelPath As String, _
     Dim dateChanges As Long
     Dim durChanges As Long
     Dim pctChanges As Long
+    Dim skippedSummaryDelete As Long
     Dim excelUids As Object
+    Dim deleteUids As Object
     Dim hoursPerDay As Double
 
     Set excelUids = CreateObject("Scripting.Dictionary")
+    Set deleteUids = CreateObject("Scripting.Dictionary")
     hoursPerDay = ActiveProject.HoursPerDay
     If hoursPerDay <= 0 Then hoursPerDay = 8
 
@@ -410,12 +413,22 @@ Private Function ApplyScheduleFromWorkbook(ByVal excelPath As String, _
     created = 0
     deleted = 0
     skippedSummaryPct = 0
+    skippedSummaryDelete = 0
     missing = 0
     keptNotInExcel = 0
     nameChanges = 0
     dateChanges = 0
     durChanges = 0
     pctChanges = 0
+
+    ' Pass 0: collect Delete=Y UniqueIDs so summary deletes can require all children flagged.
+    For row = FIRST_DATA_ROW To lastRow
+        rawUid = xlSheet.Cells(row, COL_UNIQUE_ID).Value
+        deleteFlag = UCase$(Trim$(CStr(xlSheet.Cells(row, COL_DELETE).Value & "")))
+        If deleteFlag = "Y" And Not IsBlank(rawUid) And IsNumeric(rawUid) Then
+            If Not deleteUids.Exists(CStr(CLng(rawUid))) Then deleteUids.Add CStr(CLng(rawUid)), True
+        End If
+    Next row
 
     ' Pass 1: deletes + updates + creates
     For row = FIRST_DATA_ROW To lastRow
@@ -438,9 +451,12 @@ Private Function ApplyScheduleFromWorkbook(ByVal excelPath As String, _
 
             If deleteFlag = "Y" Then
                 ' Opt-in delete only — never delete merely because a row was removed.
-                If t.UniqueID = 0 Then
-                    ' Protect project summary task
-                    GoTo NextRow
+                If t.UniqueID = 0 Then GoTo NextRow ' protect project summary
+                If t.Summary Then
+                    If Not AllDescendantsMarkedDelete(t, deleteUids) Then
+                        skippedSummaryDelete = skippedSummaryDelete + 1
+                        GoTo NextRow
+                    End If
                 End If
                 t.Delete
                 deleted = deleted + 1
@@ -490,10 +506,12 @@ NextRow:
                "  · % Complete: " & CStr(pctChanges) & vbCrLf & _
                "Tasks created: " & CStr(created) & vbCrLf & _
                "Tasks deleted (Delete=Y): " & CStr(deleted) & vbCrLf & _
+               "Summary deletes skipped (children not all Delete=Y): " & CStr(skippedSummaryDelete) & vbCrLf & _
                "Summary % Complete skipped: " & CStr(skippedSummaryPct) & vbCrLf & _
                "UniqueID in Excel not found: " & CStr(missing) & vbCrLf & _
                "Project tasks kept (not in Excel): " & CStr(keptNotInExcel) & vbCrLf & vbCrLf & _
-               "Note: rows missing from Excel are NOT deleted unless Delete=Y.", _
+               "Note: rows missing from Excel are NOT deleted unless Delete=Y." & vbCrLf & _
+               "Summary Delete=Y also requires Delete=Y on every child.", _
                vbInformation, msgTitle
     End If
 
@@ -519,6 +537,12 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
     Dim rawPct As Variant
     Dim newPct As Double
     Dim newDurMin As Double
+    Dim curDurDays As Double
+    Dim startChanged As Boolean
+    Dim finishChanged As Boolean
+    Dim durationChanged As Boolean
+    Dim newStart As Date
+    Dim newFinish As Date
     Dim touched As Boolean
 
     touched = False
@@ -532,40 +556,101 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
         End If
     End If
 
+    ' Detect which schedule fields the user actually changed. Never write
+    ' Start+Finish+Duration together — a stale Duration after date edits
+    ' reverts Finish, and needless date writes plant SNET/FNLT constraints.
+    startChanged = False
+    finishChanged = False
+    durationChanged = False
+
     rawStart = xlSheet.Cells(row, COL_START).Value
     If Not IsBlank(rawStart) And IsDate(rawStart) Then
-        On Error Resume Next
-        If CDate(t.Start) <> CDate(rawStart) Then
-            t.Start = CDate(rawStart)
-            If Err.Number = 0 Then
-                dateChanges = dateChanges + 1
-                touched = True
-            End If
-            Err.Clear
-        End If
-        On Error GoTo 0
+        newStart = DateValue(CDate(rawStart))
+        If DateValue(CDate(t.Start)) <> newStart Then startChanged = True
     End If
 
     rawFinish = xlSheet.Cells(row, COL_FINISH).Value
     If Not IsBlank(rawFinish) And IsDate(rawFinish) Then
-        On Error Resume Next
-        If CDate(t.Finish) <> CDate(rawFinish) Then
-            t.Finish = CDate(rawFinish)
-            If Err.Number = 0 Then
-                dateChanges = dateChanges + 1
-                touched = True
-            End If
-            Err.Clear
-        End If
-        On Error GoTo 0
+        newFinish = DateValue(CDate(rawFinish))
+        If DateValue(CDate(t.Finish)) <> newFinish Then finishChanged = True
     End If
 
     rawDur = xlSheet.Cells(row, COL_DURATION).Value
     If Not IsBlank(rawDur) And IsNumeric(rawDur) Then
         newDurMin = CDbl(rawDur) * 60# * hoursPerDay
         If newDurMin < 0 Then newDurMin = 0
-        On Error Resume Next
-        If Abs(t.Duration - newDurMin) > 0.5 Then
+        curDurDays = Round(t.Duration / 60# / hoursPerDay, 2)
+        If Abs(curDurDays - Round(CDbl(rawDur), 2)) > 0.009 Then durationChanged = True
+    End If
+
+    On Error Resume Next
+    If startChanged Or finishChanged Or durationChanged Then
+        If durationChanged And Not startChanged And Not finishChanged Then
+            ' Duration-only edit.
+            t.Duration = newDurMin
+            If Err.Number = 0 Then
+                durChanges = durChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        ElseIf startChanged And durationChanged Then
+            ' Start + Duration; skip Finish (may be stale relative to new duration).
+            t.Start = newStart
+            If Err.Number = 0 Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+            Err.Clear
+            t.Duration = newDurMin
+            If Err.Number = 0 Then
+                durChanges = durChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        ElseIf startChanged And finishChanged And Not durationChanged Then
+            ' Date window moved; apply Start then Finish. Skip stale Duration.
+            t.Start = newStart
+            If Err.Number = 0 Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+            Err.Clear
+            t.Finish = newFinish
+            If Err.Number = 0 Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        ElseIf startChanged And Not finishChanged And Not durationChanged Then
+            t.Start = newStart
+            If Err.Number = 0 Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        ElseIf finishChanged And Not startChanged And Not durationChanged Then
+            t.Finish = newFinish
+            If Err.Number = 0 Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        ElseIf finishChanged And durationChanged And Not startChanged Then
+            ' Prefer Duration (drives Finish) when both finish+duration changed.
+            t.Duration = newDurMin
+            If Err.Number = 0 Then
+                durChanges = durChanges + 1
+                touched = True
+            End If
+            Err.Clear
+        ElseIf startChanged And finishChanged And durationChanged Then
+            ' All three present — Start + Duration; skip Finish to avoid fighting.
+            t.Start = newStart
+            If Err.Number = 0 Then
+                dateChanges = dateChanges + 1
+                touched = True
+            End If
+            Err.Clear
             t.Duration = newDurMin
             If Err.Number = 0 Then
                 durChanges = durChanges + 1
@@ -573,8 +658,8 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
             End If
             Err.Clear
         End If
-        On Error GoTo 0
     End If
+    On Error GoTo 0
 
     ' Leaf-only % Complete — summaries roll up from children.
     If t.Summary Then
@@ -614,10 +699,14 @@ Private Function CreateTaskFromRow(ByVal xlSheet As Object, ByVal row As Long, _
         Exit Function
     End If
 
-    ' Prefer inserting under a parent matching Outline Level / WBS hint.
+    ' Outline Level is optional. Only adjust if Excel explicitly set a numeric
+    ' level — never default to 1 after a WBS-parent insert (that outdents and
+    ' reparents following tasks).
+    Dim hasExplicitOutline As Boolean
     rawOutline = xlSheet.Cells(row, COL_OUTLINE).Value
-    desiredOutline = 1
-    If Not IsBlank(rawOutline) And IsNumeric(rawOutline) Then
+    hasExplicitOutline = (Not IsBlank(rawOutline) And IsNumeric(rawOutline))
+    desiredOutline = 0
+    If hasExplicitOutline Then
         desiredOutline = CLng(rawOutline)
         If desiredOutline < 1 Then desiredOutline = 1
     End If
@@ -643,7 +732,7 @@ Private Function CreateTaskFromRow(ByVal xlSheet As Object, ByVal row As Long, _
         Set t = ActiveProject.Tasks.Add(excelName)
     End If
 
-    AdjustOutlineLevel t, desiredOutline
+    If hasExplicitOutline Then AdjustOutlineLevel t, desiredOutline
 
     ' Apply remaining fields (dates / duration / %).
     Dim nc As Long, dc As Long, duc As Long, pc As Long, sk As Long, up As Long
@@ -841,15 +930,39 @@ End Function
 
 Private Function IsExcelBusyOrTransientError(ByVal errN As Long) As Boolean
     ' 1004 = application-defined / often "Excel is busy" during in-cell edit
-    ' -2147417848 (0x80010108) RPC disconnected call — sometimes transient
     ' -2147418111 (0x80010001) RPC_E_CALL_REJECTED — Excel rejecting re-entrancy
     ' -2146777998 (0x800AC472) VBA_E_IGNORE — Excel ignoring calls while UI busy
+    ' Do NOT treat -2147417848 (RPC_E_DISCONNECTED) as busy — that means Excel
+    ' has quit and the wait loop must end so auto-import can run.
     Select Case errN
-        Case 1004, -2147417848, -2147418111, -2146777998
+        Case 1004, -2147418111, -2146777998
             IsExcelBusyOrTransientError = True
         Case Else
             IsExcelBusyOrTransientError = False
     End Select
+End Function
+
+' Summary Delete=Y is refused unless every descendant UniqueID is also Delete=Y.
+Private Function AllDescendantsMarkedDelete(ByVal summaryTask As Task, ByVal deleteUids As Object) As Boolean
+    Dim t As Task
+    Dim anyChild As Boolean
+
+    anyChild = False
+    For Each t In ActiveProject.Tasks
+        If Not t Is Nothing Then
+            If t.ID > summaryTask.ID Then
+                If t.OutlineLevel <= summaryTask.OutlineLevel Then Exit For
+                anyChild = True
+                If Not deleteUids.Exists(CStr(t.UniqueID)) Then
+                    AllDescendantsMarkedDelete = False
+                    Exit Function
+                End If
+            End If
+        End If
+    Next t
+
+    ' No children (shouldn't be summary) — allow.
+    AllDescendantsMarkedDelete = True
 End Function
 
 Private Function PathsReferToSameWorkbook(ByVal pathA As String, ByVal pathB As String) As Boolean
