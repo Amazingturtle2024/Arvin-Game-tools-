@@ -1,6 +1,6 @@
 # MS Project ↔ Excel progress sync
 
-Edit task **% Complete** in Excel, then push updates back into Microsoft Project. Built for Arvin’s Sappi Saiccor Woodyard Stormwater programme (`samples/123.mpp`): deep WBS, many summary rows, and duplicate leaf names.
+Edit task **% Complete** in Excel and push updates back into Microsoft Project. Built for Arvin’s Sappi Saiccor Woodyard Stormwater programme (`samples/123.mpp`): deep WBS, many summary rows, and duplicate leaf names.
 
 > VBA runs inside **Microsoft Project on Windows** with Excel installed. This environment did not run Project against the `.mpp`.
 
@@ -8,8 +8,9 @@ Edit task **% Complete** in Excel, then push updates back into Microsoft Project
 
 | Macro | Purpose |
 | --- | --- |
-| `ExportProgressToExcel` | Writes all tasks to `Programme_Progress.xlsx` (sheet `Progress`) |
-| `ImportProgressFromExcel` | Reads that workbook and updates matching tasks by **UniqueID** |
+| **`EditProgressInExcel`** | **Daily use** — export → open Excel → wait until you save & close → import automatically |
+| `ExportProgressToExcel` | Export only (no Excel open; no auto-import) |
+| `ImportProgressFromExcel` | Import only (if you already edited the workbook) |
 
 **Columns:** UniqueID (hidden join key), Task Name, WBS, Outline Level, Start, Finish, % Complete, Summary (Y/N).
 
@@ -17,29 +18,32 @@ Edit task **% Complete** in Excel, then push updates back into Microsoft Project
 
 - Join key is **UniqueID** only (names like `Rebar` / `Concrete` repeat under different headwalls).
 - **% Complete** is written on **leaf tasks only**. Summary rows roll up from children — Project rejects direct % writes; those rows are skipped (counted in the result MsgBox).
-- Task Name can change on any matched UniqueID.
+- Task Name can change on any matched UniqueID (only when Trimmed text actually differs — no space-only rewrites).
 - New tasks are never created. Unknown UniqueIDs are reported as missing.
 
 ## One-time setup
 
 1. Open your `.mpp` in Microsoft Project (e.g. `samples/123.mpp` or your live programme).
-2. **Developer** tab → **Visual Basic** (enable the tab under File → Options → Customize Ribbon if needed).
-3. In the Project VBA editor, open **ThisProject** (under the open project, not Normal).
-4. Paste the module body from [`vba/ThisProject.cls`](../vba/ThisProject.cls) into ThisProject (keep or replace the class `Attribute` header to match a document module).
-5. Save the `.mpp` (macros require a macro-enabled Project file; Project will prompt as needed).
-6. Optional: change the default Excel path in `DefaultExcelPath()` (currently `%USERPROFILE%\Documents\Programme_Progress.xlsx`). Sheet name constant: `PROGRESS_SHEET_NAME = "Progress"`.
+2. **Developer** tab → **Visual Basic** (enable under File → Options → Customize Ribbon if needed).
+3. Open **ThisProject** under the open project (not Normal).
+4. **Paste from [`docs/ThisProject-paste.bas`](ThisProject-paste.bas)** — that file has **no** `VERSION` / `Attribute` header lines (those cause compile errors if pasted into an existing ThisProject). Replace any older progress-sync code in the module.
+5. Save the `.mpp`.
+6. Optional: change `DefaultExcelPath()` (default `%USERPROFILE%\Documents\Programme_Progress.xlsx`). Sheet name: `PROGRESS_SHEET_NAME = "Progress"`.
 
 No Excel library reference is required (late-bound `CreateObject("Excel.Application")`).
 
-## Daily workflow
+> Repo also keeps `vba/ThisProject.cls` with the full class header for source control — **do not paste that header** into ThisProject; use the `.bas` paste file.
+
+## Daily workflow (recommended)
 
 1. Open the programme in Project.
-2. Run **ExportProgressToExcel** (Developer → Macros, or `Call ExportProgressToExcel`). Confirm or edit the export path in the InputBox.
-3. Open the workbook in Excel. Filter **Summary = N** to see editable leaf rows (summary rows are grey / % locked).
-4. Edit **% Complete** (0–100). Optionally rename tasks. Do not clear UniqueID (column A, hidden).
-5. Save and close Excel.
-6. Back in Project, run **ImportProgressFromExcel**. Read the MsgBox counts (% updated, summaries skipped, missing IDs).
-7. Save the `.mpp`.
+2. Run **`EditProgressInExcel`** (Developer → Macros).
+3. Confirm/edit the workbook path in the InputBox if prompted.
+4. Excel opens on sheet **Progress**. Filter **Summary = N**, edit leaf **% Complete** (e.g. set Vdrain to 100), optionally rename tasks. Save (Ctrl+S), then **close Excel**.
+5. Project detects the close (status bar / wait prompts every few minutes if Excel stays open) and runs the import. Read the MsgBox counts.
+6. Save the `.mpp`.
+
+Split Export / Import macros remain available if you need them; standalone Export does **not** auto-open Excel (avoids surprise). Prefer `EditProgressInExcel` for the round-trip.
 
 ## Sample schedule notes (`123.mpp`)
 
@@ -61,8 +65,10 @@ Read-only inventory: [`samples/123-task-inventory.csv`](../samples/123-task-inve
 
 | Symptom | Fix |
 | --- | --- |
+| Compile error on `VERSION` / `Attribute` | Paste from `docs/ThisProject-paste.bas`, not the `.cls` header. |
 | “Excel is not installed” | Install desktop Excel; automation needs the Excel app. |
-| File not found on import | Use the InputBox path, or re-export first. |
+| Waiting forever after edit | Save and **close Excel** (not only the window minimized). Cancel via the periodic Yes/No prompt if needed, then run `ImportProgressFromExcel`. |
+| File not found on import | Use the InputBox path, or run `EditProgressInExcel` / Export first. |
 | Sheet `Progress` missing | Don’t rename the sheet; re-export if needed. |
 | Summaries skipped | Expected — edit leaf % only; summaries roll up. |
 | UniqueID not found | You may be importing into a different `.mpp` than the one exported. |
