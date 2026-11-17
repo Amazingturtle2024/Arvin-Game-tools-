@@ -559,28 +559,53 @@ Private Sub ApplyTaskFieldsFromRow(ByVal xlSheet As Object, ByVal row As Long, B
     ' Detect which schedule fields the user actually changed. Never write
     ' Start+Finish+Duration together — a stale Duration after date edits
     ' reverts Finish, and needless date writes plant SNET/FNLT constraints.
+    ' Never DateValue-only midnights: keep Excel time if present, else Project
+    ' DefaultStartTime / DefaultEndTime (fallback 08:00 / 17:00).
+    ' Never CDate(t.Start/Finish) when Project says NA — that aborts import.
+    Dim curStart As Date
+    Dim curFinish As Date
+    Dim hasCurStart As Boolean
+    Dim hasCurFinish As Boolean
+
     startChanged = False
     finishChanged = False
     durationChanged = False
 
     rawStart = xlSheet.Cells(row, COL_START).Value
-    If Not IsBlank(rawStart) And IsDate(rawStart) Then
-        newStart = DateValue(CDate(rawStart))
-        If DateValue(CDate(t.Start)) <> newStart Then startChanged = True
+    If ExcelCellToProjectDate(rawStart, False, newStart) Then
+        hasCurStart = TryGetTaskDate(t.Start, curStart)
+        If Not hasCurStart Then
+            startChanged = True
+        ElseIf DateValue(curStart) <> DateValue(newStart) Then
+            startChanged = True
+        ElseIf ExcelValueHasTime(rawStart) And Abs(DateDiff("n", curStart, newStart)) > 0 Then
+            startChanged = True
+        End If
     End If
 
     rawFinish = xlSheet.Cells(row, COL_FINISH).Value
-    If Not IsBlank(rawFinish) And IsDate(rawFinish) Then
-        newFinish = DateValue(CDate(rawFinish))
-        If DateValue(CDate(t.Finish)) <> newFinish Then finishChanged = True
+    If ExcelCellToProjectDate(rawFinish, True, newFinish) Then
+        hasCurFinish = TryGetTaskDate(t.Finish, curFinish)
+        If Not hasCurFinish Then
+            finishChanged = True
+        ElseIf DateValue(curFinish) <> DateValue(newFinish) Then
+            finishChanged = True
+        ElseIf ExcelValueHasTime(rawFinish) And Abs(DateDiff("n", curFinish, newFinish)) > 0 Then
+            finishChanged = True
+        End If
     End If
 
     rawDur = xlSheet.Cells(row, COL_DURATION).Value
     If Not IsBlank(rawDur) And IsNumeric(rawDur) Then
         newDurMin = CDbl(rawDur) * 60# * hoursPerDay
         If newDurMin < 0 Then newDurMin = 0
+        On Error Resume Next
         curDurDays = Round(t.Duration / 60# / hoursPerDay, 2)
-        If Abs(curDurDays - Round(CDbl(rawDur), 2)) > 0.009 Then durationChanged = True
+        If Err.Number = 0 Then
+            If Abs(curDurDays - Round(CDbl(rawDur), 2)) > 0.009 Then durationChanged = True
+        End If
+        Err.Clear
+        On Error GoTo 0
     End If
 
     On Error Resume Next
@@ -1196,4 +1221,75 @@ Private Function IsBlank(ByVal v As Variant) As Boolean
     Else
         IsBlank = False
     End If
+End Function
+
+' Safe read of Project task Start/Finish — "NA" must not raise into Fail.
+Private Function TryGetTaskDate(ByVal v As Variant, ByRef outDate As Date) As Boolean
+    On Error Resume Next
+    If IsNull(v) Or IsEmpty(v) Then Exit Function
+    If VarType(v) = vbString Then
+        If Len(Trim$(CStr(v))) = 0 Then Exit Function
+        If StrComp(Trim$(CStr(v)), "NA", vbTextCompare) = 0 Then Exit Function
+    End If
+    If Not IsDate(v) Then Exit Function
+    Err.Clear
+    outDate = CDate(v)
+    If Err.Number <> 0 Then
+        Err.Clear
+        Exit Function
+    End If
+    TryGetTaskDate = True
+End Function
+
+Private Function ExcelValueHasTime(ByVal raw As Variant) As Boolean
+    On Error Resume Next
+    If IsBlank(raw) Or Not IsDate(raw) Then Exit Function
+    ExcelValueHasTime = (TimeValue(CDate(raw)) <> 0)
+    If Err.Number <> 0 Then
+        Err.Clear
+        ExcelValueHasTime = False
+    End If
+End Function
+
+' Build a Project datetime from an Excel cell: keep explicit times; for
+' date-only (midnight) cells use ActiveProject.DefaultStartTime / DefaultEndTime
+' with 08:00 / 17:00 fallback (sample calendar).
+Private Function ExcelCellToProjectDate(ByVal raw As Variant, ByVal isFinish As Boolean, _
+                                        ByRef outDate As Date) As Boolean
+    Dim d As Date
+    Dim defT As Date
+
+    On Error Resume Next
+    If IsBlank(raw) Then Exit Function
+    If Not IsDate(raw) Then Exit Function
+    Err.Clear
+    d = CDate(raw)
+    If Err.Number <> 0 Then
+        Err.Clear
+        Exit Function
+    End If
+
+    If TimeValue(d) <> 0 Then
+        outDate = d
+        ExcelCellToProjectDate = True
+        Exit Function
+    End If
+
+    Err.Clear
+    If isFinish Then
+        defT = ActiveProject.DefaultEndTime
+    Else
+        defT = ActiveProject.DefaultStartTime
+    End If
+    If Err.Number <> 0 Or TimeValue(defT) = 0 Then
+        Err.Clear
+        If isFinish Then
+            defT = TimeSerial(17, 0, 0)
+        Else
+            defT = TimeSerial(8, 0, 0)
+        End If
+    End If
+
+    outDate = DateValue(d) + TimeValue(defT)
+    ExcelCellToProjectDate = True
 End Function
