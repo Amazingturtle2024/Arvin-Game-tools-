@@ -1,5 +1,6 @@
 import type { BoqLine } from "@/modules/document-analysis/boq-items";
 import type { TenderReviewReport } from "@/modules/document-analysis/types";
+import { selectRate } from "@/modules/drawing-planning/select-rate";
 import type { DrawingPlanningReport, ProductionRate, QuantityTakeoff } from "@/modules/drawing-planning/types";
 import { calculateWorkingDays, setupHours, setupWeather } from "./duration";
 import type { ActivityKind, ActivityLink, FieldOrigin, ProgrammeActivity, ProgrammeSetup } from "./types";
@@ -354,8 +355,7 @@ function labelBoq(line: BoqLine): string {
 }
 
 function findRate(rates: ProductionRate[], key: string, unit: string): ProductionRate | undefined {
-  return rates.find((r) => r.activity_key === key && r.unit.toLowerCase() === unit.toLowerCase())
-    ?? rates.find((r) => r.activity_key === key);
+  return selectRate(rates, key, unit);
 }
 
 function sectionFor(item: QuantityTakeoff): string {

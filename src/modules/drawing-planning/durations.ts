@@ -1,3 +1,4 @@
+import { selectRate } from "./select-rate";
 import type { DurationResult, ProductionRate, QuantityTakeoff } from "./types";
 
 export function calculateDurations(takeoff: QuantityTakeoff[], rates: ProductionRate[]): DurationResult[] {
@@ -12,8 +13,7 @@ export function calculateDurations(takeoff: QuantityTakeoff[], rates: Production
   const results: DurationResult[] = [];
   for (const items of grouped.values()) {
     const key = items[0].activityKey;
-    const rate = rates.find((r) => r.activity_key === key && r.unit.toLowerCase() === items[0].unit.toLowerCase())
-      ?? rates.find((r) => r.activity_key === key);
+    const rate = selectRate(rates, key, items[0].unit);
     const quantity = round(items.reduce((n, i) => n + i.quantity, 0));
     const unit = items[0].unit;
     const unitMismatch = Boolean(rate && rate.unit.toLowerCase() !== unit.toLowerCase());

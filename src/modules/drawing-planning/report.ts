@@ -6,6 +6,7 @@ import { calculateDurations } from "./durations";
 import { extractMeasurements, identifyDrawings } from "./extract";
 import { buildMeasuredElements } from "./elements";
 import { calculateQuantities } from "./quantities";
+import { selectRate } from "./select-rate";
 import { buildSequence, methodologyNarrative } from "./sequence";
 import type { DrawingPlanningReport, PlanningRisk, ProductionRate } from "./types";
 
@@ -160,7 +161,7 @@ function toHandoff(
     calendar: { hoursPerDay, daysPerWeek },
     activities: ready.map((d) => {
       const seq = sequence.find((s) => s.activityKey === d.activityKey);
-      const rate = rates.find((r) => r.activity_key === d.activityKey);
+      const rate = selectRate(rates, d.activityKey, d.unit);
       const qtyItems = takeoff.filter((t) => t.activityKey === d.activityKey && t.unit === d.unit && t.complete);
       return {
         id: d.activityKey,

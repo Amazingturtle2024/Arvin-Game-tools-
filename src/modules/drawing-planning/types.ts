@@ -132,6 +132,8 @@ export type ProductionRate = {
   id: string;
   owner_id: string;
   activity_key: string;
+  variant_key: string;
+  trade: string;
   label: string;
   unit: string;
   rate_per_day: number | null;
@@ -144,6 +146,7 @@ export type ProductionRate = {
   accessibility: string;
   weather_allowance_pct: number;
   notes: string;
+  is_default: boolean;
 };
 
 export type DrawingPlanningReport = {

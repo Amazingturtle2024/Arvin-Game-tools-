@@ -8,7 +8,8 @@ import { analyzeDrawings } from "./index";
 import { compareBoq } from "./compare-boq";
 import { calculateDurations } from "./durations";
 import { calculateQuantities } from "./quantities";
-import { STARTER_RATES } from "./starter-rates";
+import { selectRate } from "./select-rate";
+import { MASTER_RATES, STARTER_RATES } from "./starter-rates";
 import { buildSampleDrawingPack } from "./sample";
 import type { ProductionRate, QuantityTakeoff } from "./types";
 
@@ -34,11 +35,13 @@ function rates(): ProductionRate[] {
     id: `r${i}`,
     owner_id: "test",
     activity_key: row.activity_key,
+    variant_key: row.variant_key,
+    trade: row.trade,
     label: row.label,
     unit: row.unit,
     rate_per_day: row.rate_per_day,
-    workers: 1,
-    teams: 1,
+    workers: row.workers,
+    teams: row.teams,
     plant: row.plant,
     hours_per_day: 8,
     days_per_week: 5,
@@ -46,6 +49,7 @@ function rates(): ProductionRate[] {
     accessibility: "",
     weather_allowance_pct: 0,
     notes: row.notes,
+    is_default: row.is_default,
   }));
 }
 
@@ -102,7 +106,7 @@ describe("module 2 drawing take-off", () => {
     expect(pipe?.quantity).toBe(210);
     const excDuration = report.durations.find((d) => d.activityKey === "excavation");
     expect(excDuration?.quantity).toBeGreaterThan(147);
-    expect(excDuration?.durationWorkingDays).toBeCloseTo((excDuration?.quantity ?? 0) / 150, 1);
+    expect(excDuration?.durationWorkingDays).toBeCloseTo((excDuration?.quantity ?? 0) / 100, 1);
     expect(report.boqComparison.some((r) => r.status === "difference" || r.status === "match")).toBe(true);
     const pipe150 = report.boqComparison.find((r) => /150/.test(r.boqItem || "") && /150/.test(r.drawingItem || ""));
     expect(pipe150?.status).toBe("match");
@@ -265,6 +269,17 @@ describe("module 2 drawing take-off", () => {
     );
     expect(pipeline.find((r) => r.boqItem?.includes("R.3"))?.drawingItem).toBe("150 mm pipe");
     expect(pipeline.find((r) => r.boqItem?.includes("R.3"))?.status).toBe("match");
+  });
+
+  it("uses the Production Rates MASTER default gang, not bulk plant output", () => {
+    expect(selectRate(MASTER_RATES, "excavation", "m3")?.rate_per_day).toBe(100);
+    expect(selectRate(MASTER_RATES, "excavation", "m3")?.label).toMatch(/1 TRUCK/i);
+    expect(selectRate(MASTER_RATES, "pipe", "m")?.rate_per_day).toBe(40);
+    expect(selectRate(MASTER_RATES, "formwork", "m2")?.rate_per_day).toBe(12);
+    expect(selectRate(MASTER_RATES, "concrete", "m3")?.rate_per_day).toBe(20);
+    const bulk = MASTER_RATES.find((r) => /BULK, 70m3/i.test(r.label));
+    expect(bulk?.rate_per_day).toBe(630);
+    expect(selectRate(MASTER_RATES, "excavation", "m3")?.variant_key).not.toBe(bulk?.variant_key);
   });
 
   it("blocks duration when hours per day are zero", () => {
