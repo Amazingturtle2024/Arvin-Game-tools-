@@ -44,7 +44,7 @@ export function buildDrawingReport(input: {
       "Quantities are calculated only from numbers found on the drawings or bill. Missing dimensions are listed; they are not filled in.",
       "Production rates come from your productivity table, not from the tender. Starter rates are labelled as such until you edit them.",
       "Duration = quantity ÷ (rate per day × teams × hours/8) × (1 + weather %). Working days, not calendar days, unless a week conversion is shown.",
-      "Sequence is a method-statement reading for planning. It is not yet an MS Project file.",
+      "Sequence is a method-statement reading for planning. Module 03 turns it into a Gantt chart; MS Project XML is an export, not an automatic write.",
       "BOQ comparison never changes either figure. Differences are for clarification.",
     ],
     drawings,

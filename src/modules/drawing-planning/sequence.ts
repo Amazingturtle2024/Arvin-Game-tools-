@@ -26,7 +26,7 @@ export function buildSequence(durations: DurationResult[]): SequenceItem[] {
 
 export function methodologyNarrative(sequence: SequenceItem[], durations: DurationResult[]): string[] {
   const lines = [
-    "Sequence is a planner reading of typical civil / building method. It is not a contract programme until Module 03 builds logic and calendars.",
+    "Sequence is a planner reading of typical civil / building method. Module 03 turns it into an editable Gantt chart with calendars and a critical path.",
   ];
   for (const item of sequence) {
     const d = durations.find((x) => x.activityKey === item.activityKey);

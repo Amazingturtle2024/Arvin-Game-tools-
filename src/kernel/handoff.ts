@@ -1,6 +1,6 @@
 import type { SourceRef } from "@/modules/document-analysis/types";
 
-/** Shape Module 02 hands to the future programme / MS Project module. */
+/** Shape Module 02 hands to Module 03 (programme / MS Project XML). */
 export type ProgrammeHandoff = {
   module: "drawing-planning";
   generatedAt: string;

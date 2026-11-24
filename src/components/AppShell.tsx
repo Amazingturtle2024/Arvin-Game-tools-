@@ -13,7 +13,7 @@ export function AppShell({
   return (
     <div className="min-h-screen">
       <header className="no-print border-b border-rule/80 bg-sheet/80">
-        <div className="mx-auto flex max-w-6xl items-end justify-between gap-6 px-6 py-5">
+        <div className="mx-auto flex max-w-[96rem] items-end justify-between gap-6 px-6 py-5">
           <div>
             <p className="text-[11px] tracking-[0.28em] text-moss uppercase">Construction project planning system</p>
             <Link href="/" className="font-serif text-4xl leading-none text-ink">
@@ -25,7 +25,7 @@ export function AppShell({
           </div>
         </div>
       </header>
-      <div className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[220px_1fr]">
+      <div className="mx-auto grid max-w-[96rem] gap-8 px-6 py-8 lg:grid-cols-[220px_1fr]">
         <aside className="no-print space-y-1">
           <p className="mb-3 text-[11px] tracking-[0.2em] text-brass uppercase">Programme of modules</p>
           {PLANNER_MODULES.map((mod) => {

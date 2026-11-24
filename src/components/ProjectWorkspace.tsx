@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DrawingReportView } from "./DrawingReportView";
+import { ProgrammeView } from "./ProgrammeView";
 import { RatesEditor } from "./RatesEditor";
 import { ReportView } from "./ReportView";
 import type { TenderReviewReport } from "@/modules/document-analysis/types";
@@ -28,7 +29,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
   const [report, setReport] = useState<TenderReviewReport | null>(null);
   const [drawingReport, setDrawingReport] = useState<DrawingPlanningReport | null>(null);
   const [rates, setRates] = useState<ProductionRate[]>([]);
-  const [moduleId, setModuleId] = useState<"document-analysis" | "drawing-planning">("document-analysis");
+  const [moduleId, setModuleId] = useState<"document-analysis" | "drawing-planning" | "programme">("document-analysis");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [drag, setDrag] = useState(false);
@@ -120,11 +121,11 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
           <button onClick={analyzeTender} disabled={Boolean(busy) || documents.length === 0} className="bg-moss px-5 py-2 text-sm text-paper disabled:opacity-50">
             {busy === "Reading documents" ? "Reading…" : "Run tender review"}
           </button>
-        ) : (
+        ) : moduleId === "drawing-planning" ? (
           <button onClick={analyzeDrawings} disabled={Boolean(busy) || documents.length === 0} className="bg-moss px-5 py-2 text-sm text-paper disabled:opacity-50">
             {busy === "Taking off drawings" ? "Measuring…" : "Run drawing take-off"}
           </button>
-        )}
+        ) : null}
       </div>
 
       <div className="no-print flex gap-2 border-b border-rule">
@@ -133,6 +134,9 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         </button>
         <button className={`px-3 py-2 text-sm ${moduleId === "drawing-planning" ? "border-b-2 border-moss" : "text-ink/55"}`} onClick={() => setModuleId("drawing-planning")}>
           02 Drawings & durations
+        </button>
+        <button className={`px-3 py-2 text-sm ${moduleId === "programme" ? "border-b-2 border-moss" : "text-ink/55"}`} onClick={() => setModuleId("programme")}>
+          03 Programme
         </button>
       </div>
 
@@ -151,7 +155,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
       >
         <p className="font-medium">Drop PDF, Word, Excel or drawing images</p>
         <p className="mt-1 text-sm text-ink/65">
-          Module 01 reads contracts, specs and bills. Module 02 reads drawings and your production rates. Keep both packs on the same project so quantities can be compared with the BOQ.
+          Module 01 reads contracts, specs and bills. Module 02 reads drawings and your production rates. Module 03 turns those quantities into an editable Gantt chart. Keep everything on the same project.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <label className="cursor-pointer border border-ink/30 px-3 py-1 text-sm">
@@ -214,6 +218,8 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
             <p className="text-sm text-ink/55">Run the drawing take-off after drawings (and the BOQ, if you have it) are on this project. Each element is measured: concrete m³, rebar tonnes, area m². Durations stay blank until a rate exists.</p>
           )}
         </>
+      ) : moduleId === "programme" ? (
+        <ProgrammeView projectId={projectId} />
       ) : report ? (
         <ReportView report={report} />
       ) : (

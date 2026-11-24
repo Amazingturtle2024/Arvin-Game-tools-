@@ -58,7 +58,8 @@ export function HomeClient() {
         <h1 className="mt-2 font-serif text-4xl leading-tight">Tender &amp; Contract Review</h1>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink/80">
           Module 01 reads the tender, contract and bill of quantities. Module 02 takes off drawings and compares every
-          billed item with the measured quantity, without changing either figure. Durations come from your production rates.
+          billed item with the measured quantity, without changing either figure. Module 03 builds an editable Gantt chart
+          and critical path from those quantities, without inventing missing rates or dates.
         </p>
         {viewer ? (
           <p className="mt-4 text-xs text-ink/60">

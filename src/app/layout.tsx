@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Planform — Tender & Contract Review",
-  description: "Module 01 of the construction project planning system. Reads tender documents and extracts only what they state.",
+  title: "Planform — Construction planning",
+  description: "Tender review, drawing take-off and construction programme (Gantt) for planners.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

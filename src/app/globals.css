@@ -62,6 +62,18 @@ textarea {
   color: #4d5a52;
 }
 
+.field {
+  width: 100%;
+  border-bottom: 1px solid rgb(28 42 36 / 0.3);
+  background: transparent;
+  padding: 0.2rem 0;
+  outline: none;
+}
+
+.field:focus {
+  border-color: var(--color-moss);
+}
+
 @media print {
   body {
     background: white;

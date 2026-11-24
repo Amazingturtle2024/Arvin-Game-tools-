@@ -25,8 +25,8 @@ export const PLANNER_MODULES: PlannerModule[] = [
     id: "programme",
     code: "03",
     title: "Programme Generation",
-    status: "planned",
-    summary: "Build logic, calendars and a critical path from the activity list produced by Module 02.",
+    status: "ready",
+    summary: "Build an editable WBS, working calendar, Gantt chart and critical path from Modules 01 and 02. Export Excel, PDF and Microsoft Project 2013 XML.",
   },
   {
     id: "ms-project",
