@@ -6,6 +6,7 @@ import { calculateWorkingDays, setupHours, setupWeather } from "./duration";
 import type { ActivityKind, ActivityLink, FieldOrigin, ProgrammeActivity, ProgrammeSetup } from "./types";
 
 const TRADE_CHAIN = ["excavation", "reinforcement", "formwork", "concrete", "curing"] as const;
+const STRUCTURAL_CHAIN = ["reinforcement", "formwork", "concrete", "curing"] as const;
 const ELEMENT_ORDER = ["pad-footings", "wall-footing", "ground-beams"];
 const FOUNDATION_ELEMENTS = new Set(["pad-footings", "wall-footing", "ground-beams"]);
 
@@ -356,12 +357,16 @@ function linkActivities(activities: ProgrammeActivity[]): ProgrammeActivity[] {
   let previousTail: ProgrammeActivity | undefined;
   for (const el of elementKeys) {
     if (el === "preliminaries" || el === "milestones" || el === "foundation-complete") continue;
-    const chain = TRADE_CHAIN.map((key) => byKey(key, el)[0]).filter(Boolean) as ProgrammeActivity[];
+    const ownDig = byKey("excavation", el)[0];
+    const chain = STRUCTURAL_CHAIN.map((key) => byKey(key, el)[0]).filter(Boolean) as ProgrammeActivity[];
     chain.forEach((row, i) => {
       if (i === 0) {
         const preds: ActivityLink[] = [];
-        if (previousTail) preds.push(link(previousTail.id, "FS", 0, "Next structural element waits on the pour or excavation just finished."));
-        else if (row.activityKey !== "excavation" && excavations[0]) {
+        if (ownDig) {
+          preds.push(link(ownDig.id, "FS", 0, "Shutters and steel follow a formed excavation."));
+        } else if (previousTail) {
+          preds.push(link(previousTail.id, "FS", 0, "Next structural element waits on the pour just finished."));
+        } else if (excavations[0]) {
           preds.push(link(excavations[0].id, "FS", 0, "Shutters and steel follow a formed excavation."));
         }
         if (preds.length) update(row.id, preds);
@@ -379,11 +384,11 @@ function linkActivities(activities: ProgrammeActivity[]): ProgrammeActivity[] {
               : "Recommended finish-to-start on the same element.";
       update(row.id, [link(pred.id, "FS", 0, why)]);
     });
-    if (chain.length) previousTail = chain[chain.length - 1];
+    const structuralTail = [...chain].reverse().find((a) => a.activityKey !== "curing") ?? chain.at(-1);
+    if (structuralTail) previousTail = structuralTail;
 
     const pipe = byKey("pipe", el)[0];
-    const trench = byKey("excavation", el)[0] ?? excavations[0];
-    if (pipe && trench) update(pipe.id, [link(trench.id, "FS", 0, "Pipes follow trench excavation.")]);
+    if (pipe && ownDig) update(pipe.id, [link(ownDig.id, "FS", 0, "Pipes follow trench excavation.")]);
   }
 
   if (foundationDone) {

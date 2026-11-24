@@ -183,6 +183,16 @@ describe("module 3 programme from modules 1 and 2", () => {
     const foundationSummary = programme.activities.find((a) => a.kind === "summary" && a.name === "Foundation");
     expect(foundationSummary?.plannedStart).toBeTruthy();
     expect(foundationSummary?.plannedFinish).toBeTruthy();
+    const pipe150 = programme.activities.find((a) => a.name === "150 mm pipe");
+    const trench150 = programme.activities.find((a) => a.name.includes("Trench excavation — 150 mm"));
+    expect(pipe150?.predecessors.some((p) => p.predecessorId === trench150?.id)).toBe(true);
+    expect(pipe150?.predecessors.some((p) => p.predecessorId === pads?.id)).toBe(false);
+    expect(trench150?.predecessors.some((p) => p.predecessorId === conc?.id)).toBe(false);
+    expect(trench150?.predecessors.some((p) => {
+      const pred = programme.activities.find((a) => a.id === p.predecessorId);
+      return pred?.activityKey === "curing" || pred?.activityKey === "concrete";
+    })).toBe(false);
+    expect(trench150?.predecessors.some((p) => p.predecessorId === pads?.id)).toBe(true);
     const curing = programme.activities.find((a) => a.name.startsWith("Curing"));
     expect(curing?.durationWorkingDays).toBeNull();
     expect(curing?.blockedReason).toMatch(/not been assumed|not stated/i);

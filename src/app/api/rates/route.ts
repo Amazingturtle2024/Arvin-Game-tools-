@@ -17,7 +17,7 @@ export async function PUT(request: Request) {
   let rates: Partial<ProductionRate>[] = [];
   try {
     const body = await request.json() as { rates?: Partial<ProductionRate>[] };
-    rates = Array.isArray(body.rates) ? body.rates.slice(0, 40) : [];
+    rates = Array.isArray(body.rates) ? body.rates.slice(0, 2000) : [];
   } catch {
     return jsonError(400, "invalid_json");
   }
