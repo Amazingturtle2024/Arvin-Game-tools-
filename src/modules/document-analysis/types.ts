@@ -95,12 +95,24 @@ export type RiskItem = {
   note: string;
 };
 
+export type BoqLine = {
+  itemNo: string;
+  description: string;
+  unit: string;
+  quantity: number | null;
+  rate: number | null;
+  amount: number | null;
+  section: string | null;
+  source: SourceRef;
+};
+
 export type BoqSummary = {
   found: boolean;
   sheetCount: number;
   itemCount: number | null;
   sections: string[];
   totals: { label: string; value: string; source: SourceRef }[];
+  lines: BoqLine[];
   notes: string[];
 };
 

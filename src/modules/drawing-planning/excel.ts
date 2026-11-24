@@ -16,6 +16,14 @@ export function drawingReportWorkbook(report: DrawingPlanningReport): Buffer {
   ]), "Drawing analysis");
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ["Measured elements — concrete m³, rebar t, area m²"],
+    ["Element", "Measure", "Unit", "Qty", "Complete", "Formula / note", "Drawings"],
+    ...report.elements.flatMap((el) => el.measures.map((m) => [
+      el.name, m.label, m.unit, m.quantity ?? "", m.complete ? "yes" : "no", m.complete ? m.formula : (m.note || ""), el.sourceDrawings.join("; "),
+    ])),
+  ]), "Measured");
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
     ["Quantity Take-Off"],
     ["Activity", "Label", "Qty", "Unit", "Formula", "Assumptions", "Drawings"],
     ...report.takeoff.map((t) => [t.activityKey, t.label, t.complete ? t.quantity : "", t.unit, t.formula, t.assumptions.join("; "), t.sourceDrawings.join("; ")]),
@@ -28,9 +36,9 @@ export function drawingReportWorkbook(report: DrawingPlanningReport): Buffer {
   ]), "Durations");
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ["BOQ versus drawing"],
-    ["Status", "BOQ item", "Drawing item", "Unit", "BOQ qty", "Drawing qty", "Note"],
-    ...report.boqComparison.map((r) => [r.status, r.boqItem, r.drawingItem, r.unit, r.boqQty, r.drawingQty, r.note]),
+    ["BOQ versus drawing — neither figure is changed"],
+    ["Status", "BOQ item", "Drawing item", "Unit", "BOQ qty", "Drawing qty", "Variance qty", "Variance %", "Note"],
+    ...report.boqComparison.map((r) => [r.status, r.boqItem, r.drawingItem, r.unit, r.boqQty, r.drawingQty, r.varianceQty, r.variancePct, r.note]),
   ]), "BOQ comparison");
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([

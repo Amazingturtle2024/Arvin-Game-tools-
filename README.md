@@ -5,9 +5,9 @@ Construction project planning system.
 - Module 01 — **Tender & Contract Review**
 - Module 02 — **Drawings, Quantities & Durations**
 
-Module 01 reads tender, contract, specification and BOQ files. It extracts only what those files state, with citations. It never assumes a contract type.
+Module 01 reads tender, contract, specification and BOQ files. It extracts only what those files state, with citations. The bill is listed line by line (item, unit, quantity, rate, amount). It never assumes a contract type.
 
-Module 02 reads drawings, calculates quantities with formulas, applies your production-rate table, and reports working-day durations. Missing dimensions stay missing. Results are stored as a handoff for a later Microsoft Project 2013 programme module.
+Module 02 reads drawings, calculates quantities with formulas, compares them with the BOQ without changing either figure, applies your production-rate table, and reports working-day durations. Missing dimensions stay missing. Results are stored as a handoff for a later Microsoft Project 2013 programme module.
 
 Later modules (programme, MS Project, baseline, updates, delay analysis, progress reporting) are listed in the sidebar and not implemented yet.
 
@@ -37,3 +37,5 @@ Open http://127.0.0.1:3000. On this machine the signed-in viewer is simulated.
 - Duration = quantity ÷ (rate per day × teams × hours/8) × (1 + weather %). Working days, not calendar days.
 - Raster drawings (PNG/JPEG) are stored but not measured from pixels.
 - Results are stored as a programme handoff. Microsoft Project 2013 export is a later module.
+- BOQ versus drawing is item by item. A difference is reported; neither quantity is rewritten.
+- After drawings are uploaded they are measured: concrete in m³, reinforcement in tonnes per element, area in m². Further measure kinds can be added later.

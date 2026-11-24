@@ -1,3 +1,4 @@
+import { extractBoqLines } from "./boq-items";
 import { findConflicts } from "./conflicts";
 import { extractFacts } from "./extract-facts";
 import { findMissing } from "./missing";
@@ -32,6 +33,7 @@ export function buildReport(input: {
       "General conditions are separated from project-specific contract data, particular conditions and Z clauses where the file or wording makes that distinction.",
       "Where two files disagree, both wordings are kept and marked as a conflict. The module does not pick a winner.",
       "Information that is not in the files is listed as missing. It is not filled in from industry practice.",
+      "The bill of quantities is listed item by item as written. Module 02 may compare those quantities with drawing take-off; it does not rewrite the bill.",
       "Optional model-assisted reading, if enabled, is accepted only when the returned quote is found in the source text.",
     ],
     documents: input.docs.map((d) => ({
@@ -110,14 +112,16 @@ function boqSummary(docs: ParsedDocument[], facts: ExtractedFact[]): BoqSummary 
     value: f.value,
     source: f.source,
   }));
+  const lines = extractBoqLines(docs);
   const boqDocs = docs.filter((d) => d.role === "boq");
-  const found = Boolean(countFact) || totals.length > 0;
+  const found = lines.length > 0 || Boolean(countFact) || totals.length > 0;
   return {
     found,
     sheetCount: boqDocs.reduce((n, d) => n + d.sheetNames.length, 0),
-    itemCount: countFact ? Number(countFact.value) : null,
+    itemCount: lines.length > 0 ? lines.length : countFact ? Number(countFact.value) : null,
     sections: [...new Set(sections)],
     totals,
+    lines,
     notes: found
       ? []
       : ["No bill of quantities or activity schedule was identified from item rows or stated totals. Spreadsheets are not treated as bills unless bill items are present."],

@@ -57,8 +57,8 @@ export function HomeClient() {
         <p className="font-mono text-xs tracking-[0.18em] text-brass uppercase">Before the programme</p>
         <h1 className="mt-2 font-serif text-4xl leading-tight">Tender &amp; Contract Review</h1>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink/80">
-          Module 01 reads the tender and contract. Module 02 reads drawings, takes off quantities with formulas, and
-          turns your production rates into working-day durations. Nothing is guessed: missing dimensions stay missing.
+          Module 01 reads the tender, contract and bill of quantities. Module 02 takes off drawings and compares every
+          billed item with the measured quantity, without changing either figure. Durations come from your production rates.
         </p>
         {viewer ? (
           <p className="mt-4 text-xs text-ink/60">

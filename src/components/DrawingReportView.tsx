@@ -3,11 +3,17 @@
 import { useState } from "react";
 import type { DrawingPlanningReport } from "@/modules/drawing-planning/types";
 
-const TABS = ["Drawings", "Take-off", "Durations", "BOQ", "Sequence", "Risks", "Handoff"] as const;
+const TABS = ["Measured", "Drawings", "Take-off", "Durations", "BOQ", "Sequence", "Risks", "Handoff"] as const;
 type Tab = (typeof TABS)[number];
 
 export function DrawingReportView({ report, projectId }: { report: DrawingPlanningReport; projectId: string }) {
-  const [tab, setTab] = useState<Tab>("Drawings");
+  const [tab, setTab] = useState<Tab>("Measured");
+  const boqCounts = {
+    difference: report.boqComparison.filter((r) => r.status === "difference").length,
+    match: report.boqComparison.filter((r) => r.status === "match").length,
+    boqOnly: report.boqComparison.filter((r) => r.status === "boq_only").length,
+    drawingOnly: report.boqComparison.filter((r) => r.status === "drawing_only").length,
+  };
   return (
     <div className="print-sheet space-y-5 border border-rule bg-sheet p-6 shadow-[8px_8px_0_rgba(28,42,36,0.08)]">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-rule pb-4">
@@ -25,6 +31,15 @@ export function DrawingReportView({ report, projectId }: { report: DrawingPlanni
       <ul className="list-disc space-y-1 pl-5 text-sm">
         {report.methodology.map((line) => <li key={line}>{line}</li>)}
       </ul>
+      {report.boqComparison.length > 0 ? (
+        <button type="button" onClick={() => setTab("BOQ")} className="w-full border border-rule bg-paper px-4 py-3 text-left text-sm">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-brass">Bill versus drawings</p>
+          <p>
+            {boqCounts.match} match · {boqCounts.difference} difference{boqCounts.difference === 1 ? "" : "s"} · {boqCounts.boqOnly} billed with no take-off · {boqCounts.drawingOnly} take-off with no bill
+          </p>
+          <p className="mt-1 text-ink/65">Neither figure is changed. Open the BOQ tab for item-by-item comparison.</p>
+        </button>
+      ) : null}
       <div className="no-print sticky top-0 z-10 flex flex-wrap gap-1 border-b border-rule bg-sheet">
         {TABS.map((item) => (
           <button key={item} onClick={() => setTab(item)} className={`px-3 py-2 text-sm ${tab === item ? "border-b-2 border-moss font-medium" : "text-ink/55"}`}>
@@ -32,6 +47,39 @@ export function DrawingReportView({ report, projectId }: { report: DrawingPlanni
           </button>
         ))}
       </div>
+      {tab === "Measured" ? (
+        <div className="space-y-4">
+          <p className="text-sm text-ink/70">
+            Each element is measured from the drawings. Concrete is m³, reinforcement is tonnes, area is m². A blank cell means the drawing did not state enough to calculate it.
+          </p>
+          {(report.elements ?? []).map((el) => (
+            <article key={el.id} className="border-b border-rule pb-4">
+              <p className="font-medium">{el.name}</p>
+              <p className="citation">{el.sourceDrawings.join(" · ") || "drawing not cited"}{el.concreteWork ? " · concrete work" : ""}</p>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full min-w-[480px] text-left text-sm">
+                  <thead className="text-[11px] uppercase tracking-wider text-ink/60">
+                    <tr>
+                      <th className="py-1 pr-3 font-medium">Measure</th>
+                      <th className="py-1 pr-3 font-medium">Qty</th>
+                      <th className="py-1 pr-3 font-medium">Formula</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {el.measures.map((m) => (
+                      <tr key={`${el.id}-${m.kind}-${m.label}`} className="border-t border-rule/60">
+                        <td className="py-1 pr-3">{m.label} ({m.unit})</td>
+                        <td className="py-1 pr-3 font-mono">{m.complete && m.quantity != null ? m.quantity : "—"}</td>
+                        <td className="py-1 pr-3 text-ink/70">{m.complete ? m.formula : m.note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
       {tab === "Drawings" ? (
         <div className="space-y-4">
           {report.drawings.length === 0 ? <p className="text-sm italic text-ink/55">No drawings with extractable text were identified.</p> : report.drawings.map((d) => (
@@ -87,11 +135,15 @@ export function DrawingReportView({ report, projectId }: { report: DrawingPlanni
       ) : null}
       {tab === "BOQ" ? (
         <div className="space-y-3">
-          {report.boqComparison.length === 0 ? <p className="text-sm italic text-ink/55">No BOQ lines and no drawing quantities to compare.</p> : report.boqComparison.map((row, i) => (
+          {report.boqComparison.length === 0 ? <p className="text-sm italic text-ink/55">No BOQ lines and no drawing quantities to compare. Load the bill on this project with the drawings.</p> : report.boqComparison.map((row, i) => (
             <article key={i} className="border-b border-rule pb-3">
               <p className="font-mono text-[10px] uppercase tracking-widest text-stamp">{row.status.replace("_", " ")}</p>
               <p className="text-sm">{row.boqItem || "—"} vs {row.drawingItem || "—"}</p>
-              <p className="font-mono text-sm">BOQ {row.boqQty ?? "—"} · drawing {row.drawingQty ?? "—"} {row.unit}</p>
+              <p className="font-mono text-sm">
+                BOQ {row.boqQty ?? "—"} · drawing {row.drawingQty ?? "—"} {row.unit}
+                {row.varianceQty != null ? ` · Δ ${row.varianceQty > 0 ? "+" : ""}${row.varianceQty}` : ""}
+                {row.variancePct != null ? ` (${row.variancePct > 0 ? "+" : ""}${row.variancePct}%)` : ""}
+              </p>
               <p className="text-sm text-ink/70">{row.note}</p>
             </article>
           ))}

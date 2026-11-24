@@ -211,7 +211,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         <>
           <RatesEditor rates={rates} onChange={setRates} />
           {drawingReport ? <DrawingReportView report={drawingReport} projectId={projectId} /> : (
-            <p className="text-sm text-ink/55">Run the drawing take-off after drawings (and the BOQ, if you have it) are on this project. Durations stay blank until a rate exists.</p>
+            <p className="text-sm text-ink/55">Run the drawing take-off after drawings (and the BOQ, if you have it) are on this project. Each element is measured: concrete m³, rebar tonnes, area m². Durations stay blank until a rate exists.</p>
           )}
         </>
       ) : report ? (

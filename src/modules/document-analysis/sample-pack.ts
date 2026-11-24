@@ -120,9 +120,12 @@ function xlsx(filename: string): SampleFile {
     ["Item", "Description", "Unit", "Qty", "Rate", "Amount"],
     ["C.1", "Excavate foundations", "m3", 180, 48, 8640],
     ["C.2", "In-situ concrete foundations", "m3", 95, 165, 15675],
+    ["C.3", "In-situ concrete ground beams", "m3", 9, 165, 1485],
     ["F.1", "Facing brickwork", "m2", 640, 92, 58880],
     ["R.1", "Drainage 150mm", "m", 210, 74, 15540],
-    ["", "", "", "", "Grand total", 159235],
+    ["R.2", "Drainage 450mm", "m", 40, 120, 4800],
+    ["G.1", "Gabions at outfall", "m3", 16, 85, 1360],
+    ["", "", "", "", "Grand total", 166880],
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prelim), "Preliminaries");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(measured), "Measured works");

@@ -7,7 +7,7 @@ export { buildDrawingReport } from "./report";
 export { buildSampleDrawingPack } from "./sample";
 export { drawingReportWorkbook } from "./excel";
 export { STARTER_RATES } from "./starter-rates";
-export type { DrawingPlanningReport, ProductionRate } from "./types";
+export type { DrawingPlanningReport, MeasuredElement, ProductionRate } from "./types";
 
 export async function analyzeDrawings(input: {
   projectId: string;

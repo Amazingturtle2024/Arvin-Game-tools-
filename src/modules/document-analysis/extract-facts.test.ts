@@ -197,6 +197,8 @@ describe("sample tender pack", () => {
     expect(report.amendments.some((f) => /Z1/i.test(f.value) && /weather/i.test(f.value))).toBe(true);
     expect(report.boq.found).toBe(true);
     expect((report.boq.itemCount ?? 0) >= 4).toBe(true);
+    expect(report.boq.lines.some((l) => l.itemNo === "C.1" && l.quantity === 180 && l.unit === "m3")).toBe(true);
+    expect(report.boq.lines.some((l) => l.itemNo === "R.1" && l.quantity === 210)).toBe(true);
     expect(report.conflicts.length).toBeGreaterThan(0);
     expect(report.missingInformation.some((m) => m.field === "drawings")).toBe(true);
     expect(report.risks.some((r) => r.id === "R-weather")).toBe(true);

@@ -47,6 +47,35 @@ export type QuantityTakeoff = {
   assumptions: string[];
   sourceDrawings: string[];
   complete: boolean;
+  elementKey: string;
+  elementName: string;
+};
+
+/** Current measured slots. More kinds can be added without changing the report shape. */
+export const ELEMENT_MEASURE_SLOTS = [
+  { kind: "concrete_m3", unit: "m3", label: "Concrete", activityKey: "concrete" },
+  { kind: "rebar_t", unit: "t", label: "Reinforcement", activityKey: "reinforcement" },
+  { kind: "area_m2", unit: "m2", label: "Area", activityKey: "formwork" },
+] as const;
+
+export type ElementMeasureKind = (typeof ELEMENT_MEASURE_SLOTS)[number]["kind"] | (string & {});
+
+export type ElementMeasure = {
+  kind: ElementMeasureKind;
+  label: string;
+  unit: string;
+  quantity: number | null;
+  complete: boolean;
+  formula: string;
+  note: string | null;
+};
+
+export type MeasuredElement = {
+  id: string;
+  name: string;
+  concreteWork: boolean;
+  sourceDrawings: string[];
+  measures: ElementMeasure[];
 };
 
 export type DurationResult = {
@@ -85,6 +114,8 @@ export type BoqVariance = {
   unit: string;
   boqQty: number | null;
   drawingQty: number | null;
+  varianceQty: number | null;
+  variancePct: number | null;
   note: string;
   sources: SourceRef[];
 };
@@ -125,6 +156,7 @@ export type DrawingPlanningReport = {
   measurements: Measurement[];
   discrepancies: { title: string; note: string; sources: SourceRef[] }[];
   takeoff: QuantityTakeoff[];
+  elements: MeasuredElement[];
   durations: DurationResult[];
   sequence: SequenceItem[];
   methodologyNarrative: string[];

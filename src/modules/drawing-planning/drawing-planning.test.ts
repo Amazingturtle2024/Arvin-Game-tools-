@@ -104,6 +104,24 @@ describe("module 2 drawing take-off", () => {
     expect(excDuration?.quantity).toBeGreaterThan(147);
     expect(excDuration?.durationWorkingDays).toBeCloseTo((excDuration?.quantity ?? 0) / 150, 1);
     expect(report.boqComparison.some((r) => r.status === "difference" || r.status === "match")).toBe(true);
+    const pipe150 = report.boqComparison.find((r) => /150/.test(r.boqItem || "") && /150/.test(r.drawingItem || ""));
+    expect(pipe150?.status).toBe("match");
+    expect(pipe150?.boqQty).toBe(210);
+    expect(pipe150?.drawingQty).toBe(210);
+    const pipe450 = report.boqComparison.find((r) => /450/.test(r.boqItem || "") && /450/.test(r.drawingItem || ""));
+    expect(pipe450?.status).toBe("match");
+    const pads = report.boqComparison.find((r) => /C\.1/.test(r.boqItem || ""));
+    expect(pads?.drawingQty).toBe(147);
+    expect(pads?.status).toBe("difference");
+    const padEl = report.elements.find((e) => e.id === "pad-footings");
+    expect(padEl?.measures.find((m) => m.kind === "concrete_m3")?.quantity).toBe(60);
+    expect(padEl?.measures.find((m) => m.kind === "rebar_t")?.complete).toBe(false);
+    expect(padEl?.measures.find((m) => m.kind === "area_m2")?.quantity).toBe(96);
+    const beamEl = report.elements.find((e) => e.id === "ground-beams");
+    expect(beamEl?.measures.find((m) => m.kind === "concrete_m3")?.complete).toBe(true);
+    expect(beamEl?.measures.find((m) => m.kind === "rebar_t")?.complete).toBe(true);
+    const wallEl = report.elements.find((e) => e.id === "wall-footing");
+    expect(wallEl?.measures.find((m) => m.kind === "concrete_m3")?.complete).toBe(false);
     expect(report.handoff.activities.length).toBeGreaterThan(0);
     expect(report.drawings.some((d) => d.drawingNumber === "S-FDN-101")).toBe(true);
     expect(report.drawings.find((d) => d.drawingNumber === "A-GA-001")?.drawingKind).toBe("general_arrangement");
@@ -192,7 +210,7 @@ describe("module 2 drawing take-off", () => {
         qty("excavation", "Pads", "m3", 10),
         qty("backfill", "Backfill", "m3", 8),
       ],
-      [{ itemNo: "C.1", description: "Excavate and backfill foundations", unit: "m3", quantity: 12, source: src }],
+      [{ itemNo: "C.1", description: "Excavate and backfill foundations", unit: "m3", quantity: 12, rate: null, amount: null, section: "Measured works", source: src }],
     );
     expect(rows.filter((r) => r.boqItem?.includes("C.1"))).toHaveLength(1);
     expect(rows.some((r) => r.status === "drawing_only")).toBe(true);
@@ -220,6 +238,8 @@ function qty(activityKey: string, label: string, unit: string, quantity: number)
     assumptions: [],
     sourceDrawings: [],
     complete: true,
+    elementKey: activityKey,
+    elementName: label,
   };
 }
 

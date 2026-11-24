@@ -4,6 +4,7 @@ import type { ParsedDocument } from "@/modules/document-analysis/types";
 import { compareBoq } from "./compare-boq";
 import { calculateDurations } from "./durations";
 import { extractMeasurements, identifyDrawings } from "./extract";
+import { buildMeasuredElements } from "./elements";
 import { calculateQuantities } from "./quantities";
 import { buildSequence, methodologyNarrative } from "./sequence";
 import type { DrawingPlanningReport, PlanningRisk, ProductionRate } from "./types";
@@ -17,6 +18,7 @@ export function buildDrawingReport(input: {
   const drawings = identifyDrawings(input.docs);
   const measurements = extractMeasurements(input.docs);
   const takeoff = calculateQuantities(input.docs);
+  const elements = buildMeasuredElements(takeoff);
   const boq = extractBoqLines(input.docs);
   const boqComparison = compareBoq(takeoff, boq);
   const durations = calculateDurations(takeoff, input.rates);
@@ -38,6 +40,7 @@ export function buildDrawingReport(input: {
     projectId: input.projectId,
     projectName: input.projectName,
     methodology: [
+      "After drawings are uploaded they are measured. Concrete work is reported in m³, reinforcement in tonnes per element, and surfaces in m². Missing figures stay blank.",
       "Quantities are calculated only from numbers found on the drawings or bill. Missing dimensions are listed; they are not filled in.",
       "Production rates come from your productivity table, not from the tender. Starter rates are labelled as such until you edit them.",
       "Duration = quantity ÷ (rate per day × teams × hours/8) × (1 + weather %). Working days, not calendar days, unless a week conversion is shown.",
@@ -48,6 +51,7 @@ export function buildDrawingReport(input: {
     measurements,
     discrepancies,
     takeoff,
+    elements,
     durations,
     sequence,
     methodologyNarrative: methodologyNarrative(sequence, durations),

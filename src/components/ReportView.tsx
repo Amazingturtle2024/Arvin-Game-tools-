@@ -94,13 +94,42 @@ export function ReportView({ report }: { report: TenderReviewReport }) {
         {!report.boq.found ? (
           <EmptyNote>{report.boq.notes[0] || "No bill was identified."}</EmptyNote>
         ) : (
-          <div className="text-sm leading-relaxed">
-            <p>Sheets counted: {report.boq.sheetCount || "not counted as sheets"}</p>
-            <p>Item-like rows counted: {report.boq.itemCount ?? "not counted"}</p>
-            {report.boq.sections.length > 0 ? <p>Sections: {report.boq.sections.join("; ")}</p> : null}
+          <div className="space-y-4 text-sm leading-relaxed">
+            <p>
+              {report.boq.itemCount ?? 0} billed items
+              {report.boq.sheetCount ? ` · ${report.boq.sheetCount} sheets` : ""}
+              {report.boq.sections.length > 0 ? ` · ${report.boq.sections.join("; ")}` : ""}
+            </p>
             {report.boq.totals.map((t) => (
               <p key={t.value}>{t.label}: {t.value}<span className="citation ml-2">{t.source.documentName} · {t.source.locationLabel}</span></p>
             ))}
+            {report.boq.lines.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead className="text-[11px] uppercase tracking-wider text-ink/60">
+                    <tr>
+                      {["Item", "Description", "Unit", "Qty", "Rate", "Amount", "Section"].map((h) => (
+                        <th key={h} className="border-b border-rule py-2 pr-3 font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.boq.lines.map((line) => (
+                      <tr key={`${line.itemNo}-${line.source.row}-${line.source.sheet}`} className="border-b border-rule/60">
+                        <td className="py-2 pr-3 font-mono">{line.itemNo}</td>
+                        <td className="py-2 pr-3">{line.description}</td>
+                        <td className="py-2 pr-3 font-mono">{line.unit}</td>
+                        <td className="py-2 pr-3 font-mono">{line.quantity ?? "—"}</td>
+                        <td className="py-2 pr-3 font-mono">{line.rate ?? "—"}</td>
+                        <td className="py-2 pr-3 font-mono">{line.amount ?? "—"}</td>
+                        <td className="py-2 pr-3 citation">{line.section || line.source.locationLabel}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <p className="text-ink/65">These are the billed quantities as written. Module 02 compares them with drawing take-off and does not change either figure.</p>
           </div>
         )}
       </Panel>

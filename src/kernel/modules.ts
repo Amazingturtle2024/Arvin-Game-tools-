@@ -19,7 +19,7 @@ export const PLANNER_MODULES: PlannerModule[] = [
     code: "02",
     title: "Drawings, Quantities & Durations",
     status: "ready",
-    summary: "Read drawings, take off quantities with formulas, apply your production rates, and calculate working-day durations for the programme.",
+    summary: "Read drawings, take off quantities with formulas, compare them with the BOQ without changing either figure, apply your production rates, and calculate working-day durations.",
   },
   {
     id: "programme",
