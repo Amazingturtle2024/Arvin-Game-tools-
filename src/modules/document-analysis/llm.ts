@@ -79,7 +79,7 @@ ${corpus}`;
         discarded += 1;
         continue;
       }
-      const located = locateQuote(item.quote, docs);
+      const located = locateQuote(item.quote, docs, item.documentName);
       if (!located) {
         discarded += 1;
         continue;

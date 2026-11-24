@@ -3,7 +3,7 @@ import type { ParsedDocument, SourceRef } from "@/modules/document-analysis/type
 import type { DrawingIdentity, DrawingKind, Measurement } from "./types";
 
 export function identifyDrawings(docs: ParsedDocument[]): DrawingIdentity[] {
-  return docs.filter((d) => d.role === "drawings" || isDrawingName(d.filename)).map((doc) => {
+  return docs.filter((d) => d.role === "drawings").map((doc) => {
     const text = doc.fullText;
     const drawingNumber = first(text, /\b(?:drawing\s*(?:no\.?|number)|drg\.?\s*no\.?)\s*[:.]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i);
     const revision = first(text, /\b(?:rev(?:ision)?)\s*[:.]?\s*([A-Z0-9]+)\b/i);
@@ -33,7 +33,7 @@ export function identifyDrawings(docs: ParsedDocument[]): DrawingIdentity[] {
 export function extractMeasurements(docs: ParsedDocument[]): Measurement[] {
   const out: Measurement[] = [];
   let i = 0;
-  for (const doc of docs.filter((d) => d.role === "drawings" || isDrawingName(d.filename) || d.role === "specification")) {
+  for (const doc of docs.filter((d) => d.role === "drawings")) {
     for (const unit of doc.units) {
       const patterns: Array<[Measurement["kind"], RegExp]> = [
         ["level", /\b(?:FFL|FGL|NGL|invert level|IL)\s*[=:]?\s*([+-]?\d+(?:\.\d+)?)\s*m\b/i],
@@ -66,10 +66,6 @@ export function extractMeasurements(docs: ParsedDocument[]): Measurement[] {
     }
   }
   return out;
-}
-
-export function isDrawingName(filename: string): boolean {
-  return /\b(dwg|drawing|ga|plan|section|elevation|detail|reinforcement|piling|drainage|sewer|road|foundation)\b/i.test(filename);
 }
 
 function drawingKind(filename: string, text: string): DrawingKind {

@@ -30,7 +30,7 @@ export function compareBoq(takeoff: QuantityTakeoff[], boq: BoqLine[]): BoqVaria
     const drawingQty = round(items.reduce((n, i) => n + i.quantity, 0));
     const unit = items[0].unit;
     const matches = boq.map((line, i) => ({ line, i, score: score(key, line, unit) }))
-      .filter((m) => m.score > 0)
+      .filter((m) => m.score > 0 && !usedBoq.has(m.i))
       .sort((a, b) => b.score - a.score);
     const best = matches[0];
     if (!best) {

@@ -5,10 +5,12 @@ import { buildSampleTenderPack } from "../document-analysis/sample-pack";
 import { analyzeDocuments } from "../document-analysis";
 import type { ParsedDocument } from "../document-analysis/types";
 import { analyzeDrawings } from "./index";
+import { compareBoq } from "./compare-boq";
+import { calculateDurations } from "./durations";
 import { calculateQuantities } from "./quantities";
 import { STARTER_RATES } from "./starter-rates";
 import { buildSampleDrawingPack } from "./sample";
-import type { ProductionRate } from "./types";
+import type { ProductionRate, QuantityTakeoff } from "./types";
 
 function doc(partial: Partial<ParsedDocument> & { fullText: string; filename: string }): ParsedDocument {
   const units = partial.units ?? [{ text: partial.fullText, page: 1, sheet: null, row: null, heading: null }];
@@ -161,7 +163,65 @@ describe("module 2 drawing take-off", () => {
     expect(report.durations.every((d) => d.durationWorkingDays == null)).toBe(true);
     expect(report.durations.some((d) => d.blockedReason?.includes("No production rate"))).toBe(true);
   });
+
+  it("does not take quantities from a method statement that is not a drawing", () => {
+    const takeoff = calculateQuantities([
+      doc({
+        filename: "Construction Phase Plan.pdf",
+        role: "other",
+        fullText: "Foundation pads: 12 nr 2.5 m x 2.5 m x 0.8 m deep. Working space 0.5 m. Excavate to 1.0 m below NGL.",
+      }),
+    ]);
+    expect(takeoff).toHaveLength(0);
+  });
+
+  it("does not attach two take-off groups to the same BOQ line", () => {
+    const src = {
+      documentId: "b",
+      documentName: "boq.xlsx",
+      page: null,
+      sheet: "Bill",
+      row: 1,
+      heading: null,
+      clause: null,
+      quote: "excavate and backfill",
+      locationLabel: "Bill r.1",
+    };
+    const rows = compareBoq(
+      [
+        qty("excavation", "Pads", "m3", 10),
+        qty("backfill", "Backfill", "m3", 8),
+      ],
+      [{ itemNo: "C.1", description: "Excavate and backfill foundations", unit: "m3", quantity: 12, source: src }],
+    );
+    expect(rows.filter((r) => r.boqItem?.includes("C.1"))).toHaveLength(1);
+    expect(rows.some((r) => r.status === "drawing_only")).toBe(true);
+  });
+
+  it("blocks duration when hours per day are zero", () => {
+    const result = calculateDurations(
+      [qty("excavation", "Pads", "m3", 150)],
+      rates().map((r) => (r.activity_key === "excavation" ? { ...r, hours_per_day: 0 } : r)),
+    );
+    expect(result[0].durationWorkingDays).toBeNull();
+    expect(result[0].blockedReason).toMatch(/hours per day/i);
+  });
 });
+
+function qty(activityKey: string, label: string, unit: string, quantity: number): QuantityTakeoff {
+  return {
+    id: label,
+    activityKey,
+    label,
+    unit,
+    quantity,
+    formula: `${quantity}`,
+    inputs: [],
+    assumptions: [],
+    sourceDrawings: [],
+    complete: true,
+  };
+}
 
 describe("sample tender still extracts spec sections", () => {
   it("finds Section A in the works information PDF", async () => {

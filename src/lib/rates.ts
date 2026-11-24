@@ -43,9 +43,9 @@ export async function saveRates(ownerId: string, rates: Partial<ProductionRate>[
         rate.unit || "m3",
         rate.rate_per_day ?? null,
         rate.workers ?? 1,
-        rate.teams ?? 1,
+        teamsCount(rate.teams),
         rate.plant ?? "",
-        rate.hours_per_day ?? 8,
+        hoursPerDay(rate.hours_per_day),
         rate.days_per_week ?? 5,
         rate.site_conditions ?? "",
         rate.accessibility ?? "",
@@ -58,15 +58,22 @@ export async function saveRates(ownerId: string, rates: Partial<ProductionRate>[
 }
 
 async function seedRates(ownerId: string): Promise<void> {
-  const existing = await sql<{ c: string | number }>("select count(*) as c from production_rates where owner_id = $1", [ownerId]);
-  if (Number(existing[0]?.c ?? 0) > 0) return;
   for (const row of STARTER_RATES) {
     await sql(
       `insert into production_rates (
          id, owner_id, activity_key, label, unit, rate_per_day, workers, teams, plant,
          hours_per_day, days_per_week, site_conditions, accessibility, weather_allowance_pct, notes
-       ) values ($1,$2,$3,$4,$5,$6,1,1,$7,8,5,'','',0,$8)`,
+       ) values ($1,$2,$3,$4,$5,$6,1,1,$7,8,5,'','',0,$8)
+       on conflict (owner_id, activity_key) do nothing`,
       [randomUUID(), ownerId, row.activity_key, row.label, row.unit, row.rate_per_day, row.plant, row.notes],
     );
   }
+}
+
+function hoursPerDay(value: number | null | undefined): number {
+  return value != null && value > 0 ? value : 8;
+}
+
+function teamsCount(value: number | null | undefined): number {
+  return value != null && value > 0 ? value : 1;
 }

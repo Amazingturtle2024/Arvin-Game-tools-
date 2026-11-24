@@ -12,8 +12,8 @@ export function classifyDocument(filename: string, units: TextUnit[]): {
 
   const nameRules: Array<[RegExp, DocumentRole, string, number]> = [
     [/\b(boq|bill of quantities|bills of quantities|activity schedule)\b/i, "boq", "Filename refers to a bill or activity schedule", 8],
-    [/\b(drawing|dwg|ga[-_ ]?plan|general arrangement|reinforcement|piling|drainage layout|sewer|roadworks|elevation)\b/i, "drawings", "Filename refers to drawings", 8],
-    [/\b(section|detail)\b/i, "drawings", "Filename refers to a section or detail drawing", 5],
+    [/\b(drawing|dwg|ga[-_]\d|general arrangement|drainage layout|piling layout|reinforcement drawing|roadworks drawing)\b/i, "drawings", "Filename refers to drawings", 8],
+    [/\b[A-Z]{1,3}-[A-Z]{2,4}-\d{2,4}\b/i, "drawings", "Filename looks like a drawing number", 7],
     [/\b(itt|invitation to tender|tender enquiry|instruction to tenderers)\b/i, "invitation_to_tender", "Filename refers to an invitation to tender", 8],
     [/\b(particular conditions|special conditions|z[- ]?clause|employer's amendments)\b/i, "particular_conditions", "Filename refers to particular conditions", 9],
     [/\b(contract data|contract particulars|appendix to conditions)\b/i, "contract_data", "Filename refers to contract data / particulars", 9],

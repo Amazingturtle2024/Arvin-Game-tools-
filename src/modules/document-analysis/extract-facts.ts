@@ -438,20 +438,36 @@ function dedupeFacts(facts: ExtractedFact[]): ExtractedFact[] {
   return out;
 }
 
-export function locateQuote(quote: string, docs: ParsedDocument[]): { doc: ParsedDocument; unit: TextUnit } | null {
+export function locateQuote(
+  quote: string,
+  docs: ParsedDocument[],
+  preferredName?: string | null,
+): { doc: ParsedDocument; unit: TextUnit } | null {
   const needle = collapse(quote);
   if (needle.length < 12) return null;
-  for (const doc of docs) {
+  const ordered = preferredName
+    ? [
+        ...docs.filter((d) => namesMatch(d.filename, preferredName)),
+        ...docs.filter((d) => !namesMatch(d.filename, preferredName)),
+      ]
+    : docs;
+  for (const doc of ordered) {
     for (const unit of doc.units) {
       if (collapse(unit.text).includes(needle)) return { doc, unit };
     }
   }
-  for (const doc of docs) {
+  for (const doc of ordered) {
     if (!collapse(doc.fullText).includes(needle)) continue;
     const unit = bestUnitForQuote(needle, doc.units) ?? doc.units[0];
     if (unit) return { doc, unit };
   }
   return null;
+}
+
+function namesMatch(filename: string, preferred: string): boolean {
+  const a = collapse(filename);
+  const b = collapse(preferred);
+  return a === b || a.includes(b) || b.includes(a);
 }
 
 function bestUnitForQuote(needle: string, units: TextUnit[]): TextUnit | null {

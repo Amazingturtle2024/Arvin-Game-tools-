@@ -158,6 +158,15 @@ describe("citations and classification", () => {
     ]);
     expect(role.role).toBe("specification");
   });
+
+  it("prefers the file the model named when the quote exists in two files", () => {
+    const docs = [
+      doc({ documentId: "a", filename: "first.pdf", fullText: "The delay damages are £8,500 per day of delay." }),
+      doc({ documentId: "b", filename: "Contract Data.pdf", fullText: "The delay damages are £8,500 per day of delay." }),
+    ];
+    const found = locateQuote("delay damages are £8,500 per day", docs, "Contract Data.pdf");
+    expect(found?.doc.filename).toBe("Contract Data.pdf");
+  });
 });
 
 describe("sample tender pack", () => {

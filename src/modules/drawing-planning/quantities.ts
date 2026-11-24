@@ -5,7 +5,7 @@ import type { QuantityTakeoff } from "./types";
 type Hit = { text: string; source: SourceRef };
 
 export function calculateQuantities(docs: ParsedDocument[]): QuantityTakeoff[] {
-  const drawingDocs = docs.filter((d) => d.role === "drawings" || (isDrawingFile(d.filename) && d.role !== "specification" && d.role !== "boq" && d.role !== "contract_conditions"));
+  const drawingDocs = docs.filter((d) => d.role === "drawings");
   const hits = flatten(drawingDocs);
   const allText = hits.map((h) => h.text).join("\n");
   const takeoff: QuantityTakeoff[] = [];
@@ -19,10 +19,6 @@ export function calculateQuantities(docs: ParsedDocument[]): QuantityTakeoff[] {
   takeoff.push(...gabion(hits, allText));
   takeoff.push(...statedVolumes(hits, takeoff));
   return takeoff;
-}
-
-function isDrawingFile(filename: string): boolean {
-  return /\b(dwg|drawing|ga[-_ ]|plan|elevation|detail|reinforcement|piling|drainage|sewer|road|foundation)\b/i.test(filename);
 }
 
 function pads(hits: Hit[], allText: string): QuantityTakeoff[] {
