@@ -136,7 +136,6 @@ export function GanttChart({
     linking.current = { fromId: activity.id, from: anchor, x: point.x, y: point.y };
     setWire({ x1: point.x, y1: point.y, x2: point.x, y2: point.y });
     setSelectedId(activity.id);
-    setHint(`Drag onto another bar to create a ${anchor === "finish" ? "finish" : "start"} link.`);
     bindWindow();
   }
 
@@ -152,7 +151,35 @@ export function GanttChart({
           Drag a brass handle onto another bar to link them. Click a link or a bar to change type, lag or remove it. The sequence recalculates immediately.
         </p>
       </div>
-      {hint ? <p className="text-sm text-moss">{hint}</p> : null}
+      <p className="min-h-5 text-sm text-moss">{hint || "\u00a0"}</p>
+      <div className="max-h-56 min-h-56 overflow-auto border border-rule bg-paper/70 p-4">
+        {selected && selected.kind !== "summary" ? (
+          <>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <p className="font-medium">{selected.activityId} {selected.name}</p>
+              <p className="citation">{selected.plannedStart || "—"} → {selected.plannedFinish || "—"} · {selected.durationWorkingDays ?? "—"} wd</p>
+            </div>
+            <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-brass">Sequence — predecessors (FS / SS / FF / SF)</p>
+            <LinksEditor
+              activity={selected}
+              activities={programme.activities}
+              onChange={commit}
+              highlightPredecessorId={selectedLink?.successorId === selected.id ? selectedLink.predecessorId : null}
+            />
+            {selected.startConstraint ? (
+              <button
+                type="button"
+                className="mt-3 text-xs uppercase tracking-wider text-moss"
+                onClick={() => commit(programme.activities.map((a) => a.id === selected.id ? { ...a, startConstraint: null, origin: "user" } : a))}
+              >
+                Follow predecessors (clear imposed start)
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-sm text-ink/60">Select a task to change its predecessors, relationship type and lag at any time.</p>
+        )}
+      </div>
       <div className="max-w-full overflow-auto border border-rule">
         <div className="flex min-w-full">
           <div className="sticky left-0 z-10 w-[280px] shrink-0 border-r border-rule bg-sheet">
@@ -188,10 +215,10 @@ export function GanttChart({
                 const active = selectedLink?.successorId === geom.successorId && selectedLink?.predecessorId === geom.predecessorId;
                 return (
                   <g key={`${geom.successorId}-${geom.predecessorId}`} className="pointer-events-auto">
-                    <path d={geom.d} stroke="transparent" strokeWidth="12" fill="none" className="cursor-pointer" onClick={() => {
+                    <path d={geom.d} stroke="transparent" strokeWidth="18" fill="none" className="cursor-pointer" onClick={() => {
                       setSelectedLink({ successorId: geom.successorId, predecessorId: geom.predecessorId });
                       setSelectedId(geom.successorId);
-                      setHint(`Edit ${geom.type} link${geom.lag ? ` with ${geom.lag} working days lag` : ""} below, or remove it.`);
+                      setHint(`Edit ${geom.type} link${geom.lag ? ` with ${geom.lag} working days lag` : ""} in the sequence panel, or remove it.`);
                     }} />
                     <path d={geom.d} stroke={active ? "#9c2a2a" : "#b08d3e"} strokeWidth={active ? 2.2 : 1.4} fill="none" markerEnd="url(#gantt-arrow)" />
                     <text x={geom.labelX} y={geom.labelY} fontSize="9" fill="#7a6a3a">{geom.type}{geom.lag ? `+${geom.lag}` : ""}</text>
@@ -260,32 +287,6 @@ export function GanttChart({
           </div>
         </div>
       </div>
-      {selected && selected.kind !== "summary" ? (
-        <div className="border border-rule bg-paper/70 p-4">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <p className="font-medium">{selected.activityId} {selected.name}</p>
-            <p className="citation">{selected.plannedStart || "—"} → {selected.plannedFinish || "—"} · {selected.durationWorkingDays ?? "—"} wd</p>
-          </div>
-          <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-brass">Sequence — predecessors (FS / SS / FF / SF)</p>
-          <LinksEditor
-            activity={selected}
-            activities={programme.activities}
-            onChange={commit}
-            highlightPredecessorId={selectedLink?.successorId === selected.id ? selectedLink.predecessorId : null}
-          />
-          {selected.startConstraint ? (
-            <button
-              type="button"
-              className="mt-3 text-xs uppercase tracking-wider text-moss"
-              onClick={() => commit(programme.activities.map((a) => a.id === selected.id ? { ...a, startConstraint: null, origin: "user" } : a))}
-            >
-              Follow predecessors (clear imposed start)
-            </button>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-sm text-ink/60">Select a task to change its predecessors, relationship type and lag at any time.</p>
-      )}
     </div>
   );
 }

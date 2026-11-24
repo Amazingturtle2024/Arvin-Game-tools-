@@ -94,7 +94,7 @@ export function ProgrammeView({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="print-sheet max-w-full space-y-4 overflow-hidden border border-rule bg-sheet p-5 shadow-[8px_8px_0_rgba(28,42,36,0.08)]">
+    <div className="print-sheet max-w-full min-w-0 space-y-4 overflow-x-hidden border border-rule bg-sheet p-5 shadow-[8px_8px_0_rgba(28,42,36,0.08)]">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-rule pb-3">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-widest text-brass">
@@ -138,20 +138,20 @@ export function ProgrammeView({ projectId }: { projectId: string }) {
           onApply={() => void save({ ...programme })}
         />
       ) : null}
-      {tab === "Schedule" ? (
+      <div className={tab === "Schedule" ? "min-w-0" : "hidden"}>
         <ScheduleTable
           programme={programme}
           onChange={(activities) => setProgramme({ ...programme, activities })}
           onCommit={(activities) => void save({ ...programme, activities })}
         />
-      ) : null}
-      {tab === "Gantt" ? (
+      </div>
+      <div className={tab === "Gantt" ? "" : "hidden"}>
         <GanttChart
           programme={programme}
           onChange={(activities) => setProgramme({ ...programme, activities })}
           onCommit={(activities) => void save({ ...programme, activities })}
         />
-      ) : null}
+      </div>
       {tab === "CPM" ? <CpmTable activities={programme.activities} /> : null}
       {tab === "Checks" ? (
         <div className="space-y-3">
@@ -298,7 +298,7 @@ function ScheduleTable({
   return (
     <div className="space-y-3">
       <p className="text-sm text-ink/70">Every cell is editable. Change predecessor, relationship (FS/SS/FF/SF) and lag at any time — the sequence recalculates as soon as you edit a link. Recalculate after quantity, rate or team changes. Approved rows are not rewritten by a rebuild.</p>
-      <div className="overflow-x-auto">
+      <div className="min-w-0 max-w-full overflow-x-auto">
         <table className="w-full min-w-[1500px] text-left text-xs">
           <thead className="text-[10px] uppercase tracking-wider text-ink/60">
             <tr>
