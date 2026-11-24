@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { PROJECTCONTROLS_RATES } from "@/modules/drawing-planning/projectcontrols-rates";
 import { MASTER_RATES } from "@/modules/drawing-planning/starter-rates";
 import type { ProductionRate } from "@/modules/drawing-planning/types";
 import { sql } from "./db";
+
+const CATALOGUE_RATES = [...MASTER_RATES, ...PROJECTCONTROLS_RATES];
 
 const RATE_COLUMNS = `id, owner_id, activity_key, variant_key, trade, label, unit, rate_per_day, workers, teams, plant,
             hours_per_day, days_per_week, site_conditions, accessibility, weather_allowance_pct, notes, is_default`;
@@ -78,8 +81,8 @@ async function seedRates(ownerId: string): Promise<void> {
     `select count(*)::int as n from production_rates where owner_id = $1`,
     [ownerId],
   );
-  if (n < MASTER_RATES.length) {
-    for (const row of MASTER_RATES) {
+  if (n < CATALOGUE_RATES.length) {
+    for (const row of CATALOGUE_RATES) {
       await sql(
         `insert into production_rates (
            id, owner_id, activity_key, variant_key, trade, label, unit, rate_per_day, workers, teams, plant,

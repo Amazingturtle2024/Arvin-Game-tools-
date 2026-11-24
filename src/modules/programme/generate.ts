@@ -44,7 +44,7 @@ export function generateProgramme(input: {
     methodology: [
       "The programme is built from Module 01 contract data and Module 02 measured quantities. Missing information is left blank.",
       "Duration = quantity ÷ (rate per day × teams × hours/8 when hours are not 8) × (1 + weather %). Working days follow the selected calendar.",
-      "Relationships are planner recommendations (FS / SS / FF / SF). They are not used until you keep or edit them.",
+      "Recommended logic is a construction cascade: earthworks, then foundation pads (steel → formwork → concrete), then walls, then backfill. You can change any link.",
       "Approved activities are not rewritten when the programme is regenerated.",
       "Nothing is written to Microsoft Project until you export MSP XML.",
     ],

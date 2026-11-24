@@ -1,12 +1,15 @@
 import { parseDocument } from "@/modules/document-analysis";
 import type { ParsedDocument } from "@/modules/document-analysis/types";
+import { PROJECTCONTROLS_RATES } from "./projectcontrols-rates";
 import { buildDrawingReport } from "./report";
+import { MASTER_RATES, STARTER_RATES } from "./starter-rates";
 import type { DrawingPlanningReport, ProductionRate } from "./types";
 
 export { buildDrawingReport } from "./report";
 export { buildSampleDrawingPack } from "./sample";
 export { drawingReportWorkbook } from "./excel";
-export { MASTER_RATES, STARTER_RATES } from "./starter-rates";
+export { PROJECTCONTROLS_RATES, MASTER_RATES, STARTER_RATES };
+export const CATALOGUE_RATES = [...MASTER_RATES, ...PROJECTCONTROLS_RATES];
 export { selectRate } from "./select-rate";
 export type { DrawingPlanningReport, MeasuredElement, ProductionRate } from "./types";
 

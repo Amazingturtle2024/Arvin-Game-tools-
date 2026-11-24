@@ -9,6 +9,7 @@ import { compareBoq } from "./compare-boq";
 import { calculateDurations } from "./durations";
 import { calculateQuantities } from "./quantities";
 import { selectRate } from "./select-rate";
+import { PROJECTCONTROLS_RATES } from "./projectcontrols-rates";
 import { MASTER_RATES, STARTER_RATES } from "./starter-rates";
 import { buildSampleDrawingPack } from "./sample";
 import type { ProductionRate, QuantityTakeoff } from "./types";
@@ -282,6 +283,35 @@ describe("module 2 drawing take-off", () => {
     expect(selectRate(MASTER_RATES, "excavation", "m3")?.variant_key).not.toBe(bulk?.variant_key);
     expect(selectRate(MASTER_RATES, "pipe", "kg")).toBeUndefined();
     expect(selectRate(MASTER_RATES, "excavation", "t")).toBeUndefined();
+  });
+
+  it("adds ProjectControls.com quotes without overwriting workbook outputs or defaults", () => {
+    const catalogue = [...MASTER_RATES, ...PROJECTCONTROLS_RATES];
+    const keys = catalogue.map((r) => r.variant_key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(PROJECTCONTROLS_RATES.every((r) => r.is_default === false)).toBe(true);
+    expect(PROJECTCONTROLS_RATES.every((r) => r.variant_key.startsWith("pc-"))).toBe(true);
+    expect(PROJECTCONTROLS_RATES.every((r) => r.rate_per_day > 0)).toBe(true);
+    expect(PROJECTCONTROLS_RATES.every((r) => /Quoted from ProjectControls.com/i.test(r.notes))).toBe(true);
+
+    expect(selectRate(catalogue, "excavation", "m3")?.rate_per_day).toBe(100);
+    expect(selectRate(catalogue, "excavation", "m3")?.label).toMatch(/1 TRUCK/i);
+    expect(selectRate(catalogue, "formwork", "m2")?.variant_key).not.toMatch(/^pc-/);
+    expect(selectRate(catalogue, "concrete", "m3")?.rate_per_day).toBe(20);
+    expect(selectRate(catalogue, "pipe", "m")?.rate_per_day).toBe(40);
+    expect(selectRate(catalogue, "reinforcement", "t")?.variant_key).not.toMatch(/^pc-/);
+
+    const backhoe = PROJECTCONTROLS_RATES.find((r) => /hydraulic backhoe/i.test(r.label));
+    expect(backhoe?.rate_per_day).toBe(50);
+    const rebarThumb = PROJECTCONTROLS_RATES.find((r) => /reinforcement fixing/i.test(r.label));
+    expect(rebarThumb?.rate_per_day).toBe(0.7);
+    const slab12 = PROJECTCONTROLS_RATES.find((r) => /12 mm bar/i.test(r.label));
+    expect(slab12?.rate_per_day).toBeCloseTo(8 / 16.3, 3);
+    const ellis = PROJECTCONTROLS_RATES.find((r) => /comment cap/i.test(r.label));
+    expect(ellis?.rate_per_day).toBe(30);
+    expect(ellis?.notes).toMatch(/Chris Ellis/i);
+    const masterPipe = MASTER_RATES.find((r) => r.rate_per_day === 40 && r.activity_key === "pipe");
+    expect(masterPipe?.notes).toMatch(/Production Rates MASTER/i);
   });
 
   it("does not invent a duration when the rate is in a different unit", () => {

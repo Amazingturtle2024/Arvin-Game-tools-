@@ -1,5 +1,6 @@
 import { weekdayFlags } from "./calendar";
 import type { ConstructionProgramme, LinkType, ProgrammeActivity } from "./types";
+import { depthOf } from "./wbs";
 
 const NS = "http://schemas.microsoft.com/project";
 const TYPE: Record<LinkType, number> = { FF: 0, FS: 1, SF: 2, SS: 3 };
@@ -16,7 +17,7 @@ export function programmeMspXml(programme: ConstructionProgramme): string {
 
   const taskXml = tasks.map((activity, index) => {
     const isSummary = activity.kind === "summary";
-    const outline = activity.parentId ? 2 : 1;
+    const outline = depthOf(activity, tasks) + 1;
     const durationDays = activity.durationWorkingDays ?? 0;
     const duration = `PT${Math.round(durationDays * hours)}H0M0S`;
     const links = activity.predecessors

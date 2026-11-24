@@ -1,4 +1,5 @@
 import type { ActivityLink, LinkType, ProgrammeActivity } from "./types";
+import { leafDescendants } from "./wbs";
 
 type Node = ProgrammeActivity & { es: number; ef: number; ls: number; lf: number; totalFloat: number; freeFloat: number; critical: boolean };
 
@@ -77,7 +78,7 @@ export function runCpm(activities: ProgrammeActivity[]): ProgrammeActivity[] {
   const computed = new Map(nodes);
   return activities.map((a) => {
     if (a.kind === "summary") {
-      const kids = activities.filter((k) => k.parentId === a.id && k.kind !== "summary");
+      const kids = leafDescendants(activities, a.id);
       const childNodes = kids.map((k) => computed.get(k.id)).filter(Boolean) as Node[];
       if (!childNodes.length) return { ...a, es: null, ef: null, ls: null, lf: null, totalFloat: null, freeFloat: null, critical: false };
       const es = Math.min(...childNodes.map((c) => c.es));

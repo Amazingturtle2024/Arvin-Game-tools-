@@ -14,16 +14,20 @@ export function RatesEditor({
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [trade, setTrade] = useState("all");
+  const [source, setSource] = useState<"all" | "workbook" | "projectcontrols">("all");
 
   const trades = useMemo(() => [...new Set(rates.map((r) => r.trade).filter(Boolean))], [rates]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rates.filter((row) => {
       if (trade !== "all" && row.trade !== trade) return false;
+      const fromPc = row.variant_key.startsWith("pc-");
+      if (source === "workbook" && fromPc) return false;
+      if (source === "projectcontrols" && !fromPc) return false;
       if (!q) return true;
       return `${row.label} ${row.activity_key} ${row.unit} ${row.notes}`.toLowerCase().includes(q);
     });
-  }, [rates, query, trade]);
+  }, [rates, query, trade, source]);
 
   function update(variantKey: string, patch: Partial<ProductionRate>) {
     onChange(rates.map((row) => (row.variant_key === variantKey ? { ...row, ...patch } : row)));
@@ -60,7 +64,7 @@ export function RatesEditor({
         <div>
           <p className="font-mono text-[11px] uppercase tracking-widest text-brass">Productivity database</p>
           <p className="text-sm text-ink/70">
-            Loaded from Production Rates MASTER (8-hour shift). Mark one gang per activity as “use for take-off”. Durations stay blank until that rate is a positive number.
+            Workbook gangs keep only the figures that were filled in. ProjectControls.com quotes fill gaps as extra gangs you can pick; they do not overwrite a workbook output. Mark one gang per activity as “use for take-off”.
           </p>
         </div>
         <button type="button" onClick={() => void save()} className="bg-moss px-3 py-1 text-sm text-paper" disabled={saving}>
@@ -79,13 +83,18 @@ export function RatesEditor({
           <option value="all">All trades</option>
           {trades.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
+        <select className="field" value={source} onChange={(e) => setSource(e.target.value as typeof source)}>
+          <option value="all">Workbook + ProjectControls.com</option>
+          <option value="workbook">Workbook only</option>
+          <option value="projectcontrols">ProjectControls.com quotes</option>
+        </select>
         <p className="self-center text-xs text-ink/55">{visible.length} of {rates.length} gangs</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-paper text-[11px] uppercase tracking-wider text-ink/60">
             <tr>
-              {["Use", "Trade", "Activity", "Gang / method", "Unit", "Output / day", "Teams", "Workers", "Hours", "Plant"].map((h) => (
+              {["Use", "Source", "Trade", "Activity", "Gang / method", "Unit", "Output / day", "Teams", "Workers", "Hours", "Plant"].map((h) => (
                 <th key={h} className="px-3 py-2 font-medium">{h}</th>
               ))}
             </tr>
@@ -101,6 +110,9 @@ export function RatesEditor({
                     onChange={() => useForTakeoff(row)}
                     title="Use this gang for take-off and the Gantt"
                   />
+                </td>
+                <td className="px-3 py-1 font-mono text-[11px] text-ink/60">
+                  {row.variant_key.startsWith("pc-") ? "ProjectControls.com" : "Workbook"}
                 </td>
                 <td className="px-3 py-1 font-mono text-[11px] text-brass">{row.trade}</td>
                 <td className="px-3 py-1 font-mono text-[11px]">{row.activity_key}</td>

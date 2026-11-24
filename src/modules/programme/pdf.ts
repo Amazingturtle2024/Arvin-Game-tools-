@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { parseIsoDate } from "./calendar";
 import type { ConstructionProgramme } from "./types";
+import { depthOf } from "./wbs";
 
 export async function programmePdf(programme: ConstructionProgramme): Promise<Buffer> {
   const doc = await PDFDocument.create();
@@ -11,7 +12,9 @@ export async function programmePdf(programme: ConstructionProgramme): Promise<Bu
   const moss = rgb(0.18, 0.31, 0.24);
   const ink = rgb(0.11, 0.16, 0.14);
   const brass = rgb(0.69, 0.55, 0.24);
-  const stamp = rgb(0.61, 0.16, 0.16);
+  const stamp = rgb(0.75, 0.31, 0.3);
+  const taskBlue = rgb(0.31, 0.51, 0.74);
+  const summary = rgb(0.12, 0.12, 0.12);
   const rule = rgb(0.8, 0.75, 0.65);
 
   const title = programme.setup.projectName.value || "Construction programme";
@@ -43,8 +46,9 @@ export async function programmePdf(programme: ConstructionProgramme): Promise<Bu
       page = doc.addPage(pageSize);
       y = 550;
     }
+    const depth = depthOf(activity, programme.activities);
     const label = `${activity.wbs}  ${activity.name}`.slice(0, 42);
-    page.drawText(label, { x: 36, y, size: 7, font: activity.kind === "summary" ? bold : font, color: ink });
+    page.drawText(label, { x: 36 + depth * 8, y, size: 7, font: activity.kind === "summary" ? bold : font, color: ink });
     if (activity.plannedStart && activity.plannedFinish && min) {
       const a = parseIsoDate(activity.plannedStart);
       const b = parseIsoDate(activity.plannedFinish);
@@ -52,11 +56,12 @@ export async function programmePdf(programme: ConstructionProgramme): Promise<Bu
         const x0 = chartX + ((a.getTime() - min.getTime()) / 86400000 / span) * chartW;
         const x1 = chartX + ((b.getTime() - min.getTime()) / 86400000 / span) * chartW;
         const w = Math.max(activity.kind === "milestone" ? 6 : 4, x1 - x0 + 4);
-        const color = activity.critical ? stamp : activity.kind === "milestone" ? brass : moss;
         if (activity.kind === "milestone") {
-          page.drawRectangle({ x: x0, y: y - 1, width: 6, height: 6, color, rotate: undefined });
+          page.drawRectangle({ x: x0, y: y - 1, width: 6, height: 6, color: summary });
+        } else if (activity.kind === "summary") {
+          page.drawRectangle({ x: x0, y: y + 2, width: w, height: 4, color: summary });
         } else {
-          page.drawRectangle({ x: x0, y: y, width: w, height: 7, color });
+          page.drawRectangle({ x: x0, y: y, width: w, height: 7, color: activity.critical ? stamp : taskBlue });
         }
       }
     }
@@ -64,7 +69,7 @@ export async function programmePdf(programme: ConstructionProgramme): Promise<Bu
   }
 
   y -= 8;
-  page.drawText("Critical bars in red. Dates follow the working calendar. This PDF is a record, not the live programme.", {
+  page.drawText("Critical tasks red, other tasks blue, summaries black. Dates follow the working calendar.", {
     x: 36, y: Math.max(y, 24), size: 7, font, color: moss,
   });
 

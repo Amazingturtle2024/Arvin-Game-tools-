@@ -3,6 +3,7 @@ import { hasCycle, runCpm } from "./cpm";
 import { calculateWorkingDays, setupHours, setupWeather } from "./duration";
 import { validateProgramme } from "./validate";
 import type { ConstructionProgramme, ProgrammeActivity } from "./types";
+import { leafDescendants } from "./wbs";
 
 export function applySchedule(programme: ConstructionProgramme): ConstructionProgramme {
   const start = parseIsoDate(programme.setup.commencementDate.value);
@@ -69,17 +70,17 @@ function assignDates(activity: ProgrammeActivity, start: Date | null, programme:
 function rollupSummaries(activities: ProgrammeActivity[]): ProgrammeActivity[] {
   return activities.map((activity) => {
     if (activity.kind !== "summary") return activity;
-    const kids = activities.filter((a) => a.parentId === activity.id && a.kind !== "summary");
+    const kids = leafDescendants(activities, activity.id);
     if (!kids.length) return activity;
     const starts = kids.map((k) => k.plannedStart).filter(Boolean) as string[];
     const finishes = kids.map((k) => k.plannedFinish).filter(Boolean) as string[];
-    const days = kids.reduce((n, k) => n + (k.durationWorkingDays ?? 0), 0);
+    const elapsed = activity.es != null && activity.ef != null ? round(activity.ef - activity.es) : null;
     return {
       ...activity,
       plannedStart: starts.sort()[0] ?? null,
       plannedFinish: finishes.sort().at(-1) ?? null,
-      durationWorkingDays: round(days),
-      durationFormula: "Sum of section working days (not elapsed).",
+      durationWorkingDays: elapsed,
+      durationFormula: "Elapsed working days from first child start to last child finish.",
     };
   });
 }

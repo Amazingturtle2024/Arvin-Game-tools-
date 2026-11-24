@@ -4,13 +4,19 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { LinksEditor } from "./LinksEditor";
 import { addLink, linkTypeFromAnchors } from "@/modules/programme/links";
 import type { ConstructionProgramme, LinkType, ProgrammeActivity } from "@/modules/programme/types";
+import { ancestorCollapsed, depthOf } from "@/modules/programme/wbs";
 
 type Scale = "day" | "week" | "month";
 type Anchor = "start" | "finish";
 
 const PX: Record<Scale, number> = { day: 22, week: 10, month: 4 };
-const ROW = 32;
-const HEAD = 32;
+const ROW = 28;
+const HEAD = 40;
+const TABLE_W = 620;
+const CRITICAL = "#c0504d";
+const TASK = "#4f81bd";
+const SUMMARY = "#1f1f1f";
+const LINK = "#6b7280";
 
 export function GanttChart({
   programme,
@@ -33,13 +39,15 @@ export function GanttChart({
   const programmeRef = useRef(programme);
   programmeRef.current = programme;
   const px = PX[scale];
-  const rows = programme.activities.filter((a) => !a.parentId || !collapsed.has(a.parentId));
+  const rows = programme.activities.filter((a) => !ancestorCollapsed(a, collapsed, programme.activities));
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
+  const outline = new Map(rows.map((a, i) => [a.id, i + 1]));
   const range = dateRange(programme);
   const width = Math.max(range.days * px, 400);
   const height = HEAD + rows.length * ROW;
   const selected = programme.activities.find((a) => a.id === selectedId) ?? null;
+  const months = monthBands(range.start, range.days);
 
   function toggle(id: string) {
     setCollapsed((prev) => {
@@ -148,7 +156,7 @@ export function GanttChart({
           </button>
         ))}
         <p className="self-center text-xs text-ink/60">
-          Drag a brass handle onto another bar to link them. Click a link or a bar to change type, lag or remove it. The sequence recalculates immediately.
+          Drag a handle onto another bar to link them. Click a link or a bar to change type, lag or remove it.
         </p>
       </div>
       <p className="min-h-5 text-sm text-moss">{hint || "\u00a0"}</p>
@@ -156,8 +164,8 @@ export function GanttChart({
         {selected && selected.kind !== "summary" ? (
           <>
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-              <p className="font-medium">{selected.activityId} {selected.name}</p>
-              <p className="citation">{selected.plannedStart || "—"} → {selected.plannedFinish || "—"} · {selected.durationWorkingDays ?? "—"} wd</p>
+              <p className="font-medium">{outline.get(selected.id) ?? selected.activityId} {selected.name}</p>
+              <p className="citation">{selected.plannedStart || "—"} → {selected.plannedFinish || "—"} · {formatDuration(selected)}</p>
             </div>
             <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-brass">Sequence — predecessors (FS / SS / FF / SF)</p>
             <LinksEditor
@@ -180,113 +188,219 @@ export function GanttChart({
           <p className="text-sm text-ink/60">Select a task to change its predecessors, relationship type and lag at any time.</p>
         )}
       </div>
-      <div className="max-w-full overflow-auto border border-rule">
-        <div className="flex min-w-full">
-          <div className="sticky left-0 z-10 w-[280px] shrink-0 border-r border-rule bg-sheet">
-            <div className="border-b border-rule px-2 py-2 font-mono text-[10px] uppercase tracking-widest text-brass" style={{ height: HEAD }}>WBS / Activity / links</div>
-            {rows.map((a) => (
-              <button
-                type="button"
-                key={a.id}
-                className={`flex w-full items-center gap-1 border-b border-rule/60 px-2 text-left text-xs ${selectedId === a.id ? "bg-moss/10" : ""}`}
-                style={{ height: ROW }}
-                onClick={() => {
-                  setSelectedId(a.id);
-                  setSelectedLink(null);
-                }}
-              >
-                {a.kind === "summary" ? (
-                  <span className="w-4 text-moss" onClick={(e) => { e.stopPropagation(); toggle(a.id); }}>{collapsed.has(a.id) ? "+" : "–"}</span>
-                ) : <span className="w-4" />}
-                <span className={`truncate ${a.critical ? "text-stamp" : ""} ${a.kind === "summary" ? "font-medium" : ""}`}>
-                  {a.wbs} {a.name}
-                </span>
-                {a.kind !== "summary" && a.predecessors.length ? (
-                  <span className="ml-auto shrink-0 font-mono text-[9px] text-brass">
-                    {a.predecessors.map((p) => `${labelOf(programme.activities, p.predecessorId)} ${p.type}${p.lagWorkingDays ? `+${p.lagWorkingDays}` : ""}`).join(" · ")}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
-          <div className="relative select-none" ref={chartRef} style={{ width, height }}>
-            <svg className="pointer-events-none absolute left-0 top-0 z-0" width={width} height={height}>
-              {linkGeometry(rows, programme.activities, range.start, px).map((geom) => {
-                const active = selectedLink?.successorId === geom.successorId && selectedLink?.predecessorId === geom.predecessorId;
+      <div className="border border-rule bg-white text-ink">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule bg-sheet px-3 py-2 text-[11px]">
+          <p className="font-serif text-sm">{programme.setup.projectName.value || "Construction programme"}</p>
+          <p className="font-mono uppercase tracking-wider text-ink/60">
+            Duration {workingSpan(programme)} days · Start {programme.setup.commencementDate.value || "—"} · Finish {programme.plannedCompletion || "—"}
+          </p>
+        </div>
+        <div className="max-w-full overflow-auto">
+          <div className="flex min-w-full">
+            <div className="sticky left-0 z-20 shrink-0 border-r border-neutral-400 bg-white" style={{ width: TABLE_W }}>
+              <table className="w-full table-fixed border-collapse text-left text-[11px]">
+                <colgroup>
+                  <col style={{ width: 36 }} />
+                  <col />
+                  <col style={{ width: 52 }} />
+                  <col style={{ width: 72 }} />
+                  <col style={{ width: 72 }} />
+                  <col style={{ width: 78 }} />
+                </colgroup>
+                <thead>
+                  <tr className="bg-neutral-100 font-mono text-[10px] uppercase tracking-wider text-ink/70" style={{ height: HEAD }}>
+                    {["ID", "Task Name", "Dur", "Start", "Finish", "Preds"].map((h) => (
+                      <th key={h} className="border-b border-r border-neutral-300 px-1.5 align-bottom font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((a) => {
+                    const depth = depthOf(a, programme.activities);
+                    return (
+                      <tr
+                        key={a.id}
+                        className={`cursor-pointer border-b border-neutral-200 ${
+                          selectedId === a.id ? "bg-sky-50" : a.kind === "summary" ? "bg-neutral-50" : "bg-white"
+                        }`}
+                        style={{ height: ROW }}
+                        onClick={() => {
+                          setSelectedId(a.id);
+                          setSelectedLink(null);
+                        }}
+                      >
+                        <td className="overflow-hidden border-r border-neutral-200 px-1.5 font-mono text-ink/55 whitespace-nowrap">{outline.get(a.id)}</td>
+                        <td className="overflow-hidden border-r border-neutral-200 whitespace-nowrap" style={{ paddingLeft: 4 + depth * 12 }}>
+                          {a.kind === "summary" ? (
+                            <button
+                              type="button"
+                              className="mr-1 inline-block w-3 font-mono text-[10px] text-ink/70"
+                              onClick={(e) => { e.stopPropagation(); toggle(a.id); }}
+                            >
+                              {collapsed.has(a.id) ? "+" : "–"}
+                            </button>
+                          ) : <span className="mr-1 inline-block w-3" />}
+                          <span className={`inline-block max-w-[calc(100%-16px)] truncate align-middle ${a.kind === "summary" ? "font-semibold" : ""} ${a.critical && a.kind !== "summary" ? "text-[#9c2a2a]" : ""}`}>
+                            {a.name}
+                          </span>
+                        </td>
+                        <td className="overflow-hidden border-r border-neutral-200 px-1 font-mono whitespace-nowrap">{formatDuration(a)}</td>
+                        <td className="overflow-hidden border-r border-neutral-200 px-1 font-mono whitespace-nowrap">{shortDate(a.plannedStart)}</td>
+                        <td className="overflow-hidden border-r border-neutral-200 px-1 font-mono whitespace-nowrap">{shortDate(a.plannedFinish)}</td>
+                        <td className="overflow-hidden px-1 font-mono text-[10px] text-ink/70 whitespace-nowrap">
+                          {a.kind === "summary" ? "" : predLabel(a, outline, programme.activities)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="relative select-none bg-[repeating-linear-gradient(90deg,#f7f7f7_0,#f7f7f7_1px,transparent_1px,transparent)]" ref={chartRef} style={{ width, height, backgroundSize: `${px}px 100%` }}>
+              <svg className="pointer-events-none absolute left-0 top-0 z-0" width={width} height={height}>
+                {Array.from({ length: range.days }, (_, i) => {
+                  const d = addDays(range.start, i);
+                  const weekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
+                  if (!weekend) return null;
+                  return <rect key={`we-${i}`} x={i * px} y={HEAD} width={px} height={height - HEAD} fill="#f3f0ea" />;
+                })}
+                {linkGeometry(rows, programme.activities, range.start, px).map((geom) => {
+                  const active = selectedLink?.successorId === geom.successorId && selectedLink?.predecessorId === geom.predecessorId;
+                  const color = geom.critical ? CRITICAL : active ? SUMMARY : LINK;
+                  return (
+                    <g key={`${geom.successorId}-${geom.predecessorId}`} className="pointer-events-auto">
+                      <path d={geom.d} stroke="transparent" strokeWidth="16" fill="none" className="cursor-pointer" onClick={() => {
+                        setSelectedLink({ successorId: geom.successorId, predecessorId: geom.predecessorId });
+                        setSelectedId(geom.successorId);
+                        setHint(`Edit ${geom.type} link${geom.lag ? ` with ${geom.lag} working days lag` : ""} in the sequence panel, or remove it.`);
+                      }} />
+                      <path d={geom.d} stroke={color} strokeWidth={active ? 2 : 1.15} fill="none" markerEnd={geom.critical ? "url(#gantt-arrow-crit)" : "url(#gantt-arrow)"} />
+                    </g>
+                  );
+                })}
+                <defs>
+                  <marker id="gantt-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L6,3 L0,6 Z" fill={LINK} />
+                  </marker>
+                  <marker id="gantt-arrow-crit" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L6,3 L0,6 Z" fill={CRITICAL} />
+                  </marker>
+                </defs>
+              </svg>
+              <svg className="pointer-events-none absolute left-0 top-0 z-20" width={width} height={height}>
+                {wire ? <path d={`M ${wire.x1} ${wire.y1} L ${wire.x2} ${wire.y2}`} stroke="#2f4f3e" strokeDasharray="4 3" fill="none" /> : null}
+              </svg>
+              <div className="pointer-events-none relative z-10 border-b border-neutral-400 bg-neutral-100" style={{ height: HEAD }}>
+                <div className="flex h-5 border-b border-neutral-300">
+                  {months.map((band) => (
+                    <div key={band.key} className="truncate border-r border-neutral-400 text-center font-mono text-[10px] font-semibold uppercase tracking-wider text-ink/70" style={{ width: band.days * px }}>
+                      {band.label}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex h-5">
+                  {Array.from({ length: range.days }, (_, i) => {
+                    const d = addDays(range.start, i);
+                    const label = scale === "day" ? String(d.getUTCDate()) : scale === "week" ? (d.getUTCDay() === 1 ? `W${weekNum(d)}` : "") : (d.getUTCDate() === 1 ? String(d.getUTCDate()) : "");
+                    return (
+                      <div key={i} className="border-r border-neutral-200 text-center font-mono text-[9px] text-ink/45" style={{ width: px }}>
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {rows.map((a) => {
+                const bar = barBox(a, range.start, px);
                 return (
-                  <g key={`${geom.successorId}-${geom.predecessorId}`} className="pointer-events-auto">
-                    <path d={geom.d} stroke="transparent" strokeWidth="18" fill="none" className="cursor-pointer" onClick={() => {
-                      setSelectedLink({ successorId: geom.successorId, predecessorId: geom.predecessorId });
-                      setSelectedId(geom.successorId);
-                      setHint(`Edit ${geom.type} link${geom.lag ? ` with ${geom.lag} working days lag` : ""} in the sequence panel, or remove it.`);
-                    }} />
-                    <path d={geom.d} stroke={active ? "#9c2a2a" : "#b08d3e"} strokeWidth={active ? 2.2 : 1.4} fill="none" markerEnd="url(#gantt-arrow)" />
-                    <text x={geom.labelX} y={geom.labelY} fontSize="9" fill="#7a6a3a">{geom.type}{geom.lag ? `+${geom.lag}` : ""}</text>
-                  </g>
-                );
-              })}
-              <defs>
-                <marker id="gantt-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                  <path d="M0,0 L6,3 L0,6 Z" fill="#b08d3e" />
-                </marker>
-              </defs>
-            </svg>
-            <svg className="pointer-events-none absolute left-0 top-0 z-20" width={width} height={height}>
-              {wire ? <path d={`M ${wire.x1} ${wire.y1} L ${wire.x2} ${wire.y2}`} stroke="#2f4f3e" strokeDasharray="4 3" fill="none" /> : null}
-            </svg>
-            <div className="pointer-events-none relative z-10 flex border-b border-rule bg-paper/80" style={{ height: HEAD }}>
-              {Array.from({ length: range.days }, (_, i) => {
-                const d = addDays(range.start, i);
-                const label = scale === "day" ? d.getUTCDate() : scale === "week" ? (d.getUTCDay() === 1 ? `W${weekNum(d)}` : "") : (d.getUTCDate() === 1 ? month(d) : "");
-                return (
-                  <div key={i} className="border-r border-rule/40 text-center font-mono text-[9px] text-ink/50" style={{ width: px, height: HEAD }}>
-                    {label}
+                  <div key={a.id} className={`pointer-events-none relative z-10 border-b border-neutral-200 ${selectedId === a.id ? "bg-sky-50/80" : ""}`} style={{ height: ROW }}>
+                    {bar ? (
+                      <Bar
+                        activity={a}
+                        bar={bar}
+                        onBarDown={onBarDown}
+                        onHandleDown={onHandleDown}
+                      />
+                    ) : null}
                   </div>
                 );
               })}
             </div>
-            {rows.map((a) => {
-              const bar = barBox(a, range.start, px);
-              return (
-                <div key={a.id} className={`pointer-events-none relative z-10 border-b border-rule/60 ${selectedId === a.id ? "bg-moss/5" : ""}`} style={{ height: ROW }}>
-                  {bar ? (
-                    <div
-                      className={`pointer-events-auto absolute top-2 h-5 cursor-grab ${a.kind === "milestone" ? "rotate-45" : ""} ${a.critical ? "bg-stamp" : a.kind === "summary" ? "bg-brass/70" : "bg-moss"}`}
-                      style={{ left: bar.left, width: a.kind === "milestone" ? 10 : bar.width }}
-                      onPointerDown={(e) => onBarDown(a, "move", e)}
-                      title={`${a.name} ${a.plannedStart ?? ""} – ${a.plannedFinish ?? ""}`}
-                    >
-                      {a.kind !== "summary" ? (
-                        <>
-                          <span
-                            className="absolute -left-1.5 top-1 z-20 h-3 w-3 cursor-crosshair rounded-full border border-paper bg-brass"
-                            title="Drag from the start to link (SS or SF)"
-                            onPointerDown={(e) => onHandleDown(a, "start", e)}
-                          />
-                          <span
-                            className="absolute -right-1.5 top-1 z-20 h-3 w-3 cursor-crosshair rounded-full border border-paper bg-brass"
-                            title="Drag from the finish to link (FS or FF)"
-                            onPointerDown={(e) => onHandleDown(a, "finish", e)}
-                          />
-                        </>
-                      ) : null}
-                      {a.kind !== "milestone" && a.kind !== "summary" ? (
-                        <span
-                          className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-black/20"
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            onBarDown(a, "resize", e);
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
           </div>
         </div>
+        <ul className="flex flex-wrap gap-4 border-t border-rule bg-sheet px-3 py-2 text-[10px] uppercase tracking-wider text-ink/60">
+          <li className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-6" style={{ background: TASK }} /> Task</li>
+          <li className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-6" style={{ background: CRITICAL }} /> Critical</li>
+          <li className="flex items-center gap-1.5"><span className="inline-block h-1.5 w-8 bg-neutral-900" /> Summary</li>
+          <li className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rotate-45 bg-neutral-900" /> Milestone</li>
+        </ul>
       </div>
+    </div>
+  );
+}
+
+function Bar({
+  activity,
+  bar,
+  onBarDown,
+  onHandleDown,
+}: {
+  activity: ProgrammeActivity;
+  bar: { left: number; width: number };
+  onBarDown: (activity: ProgrammeActivity, mode: "move" | "resize", event: ReactPointerEvent<Element>) => void;
+  onHandleDown: (activity: ProgrammeActivity, anchor: Anchor, event: ReactPointerEvent<Element>) => void;
+}) {
+  if (activity.kind === "milestone") {
+    return (
+      <div
+        className="pointer-events-auto absolute top-[7px] h-3 w-3 rotate-45 cursor-grab bg-neutral-900"
+        style={{ left: bar.left }}
+        onPointerDown={(e) => onBarDown(activity, "move", e)}
+        title={`${activity.name} ${activity.plannedStart ?? ""}`}
+      >
+        <span className="absolute -left-1 top-0.5 h-2 w-2 cursor-crosshair rounded-full border border-white bg-brass" onPointerDown={(e) => onHandleDown(activity, "start", e)} />
+        <span className="absolute -right-1 top-0.5 h-2 w-2 cursor-crosshair rounded-full border border-white bg-brass" onPointerDown={(e) => onHandleDown(activity, "finish", e)} />
+      </div>
+    );
+  }
+  if (activity.kind === "summary") {
+    return (
+      <div className="pointer-events-none absolute top-[10px]" style={{ left: bar.left, width: Math.max(bar.width, 12) }}>
+        <div className="h-[5px] bg-neutral-900" />
+        <span className="absolute left-0 top-0 h-0 w-0 border-x-[5px] border-t-[8px] border-x-transparent border-t-neutral-900" />
+        <span className="absolute right-0 top-0 h-0 w-0 border-x-[5px] border-t-[8px] border-x-transparent border-t-neutral-900" />
+      </div>
+    );
+  }
+  const color = activity.critical ? CRITICAL : TASK;
+  const progress = Math.max(0, Math.min(100, activity.progressPct || 0));
+  return (
+    <div
+      className="pointer-events-auto absolute top-[6px] h-[13px] cursor-grab shadow-sm"
+      style={{ left: bar.left, width: bar.width, background: color }}
+      onPointerDown={(e) => onBarDown(activity, "move", e)}
+      title={`${activity.name} ${activity.plannedStart ?? ""} – ${activity.plannedFinish ?? ""}`}
+    >
+      {progress > 0 ? (
+        <span className="absolute inset-y-0 left-0 bg-black/35" style={{ width: `${progress}%` }} />
+      ) : null}
+      <span
+        className="absolute -left-1.5 top-[2px] z-20 h-2.5 w-2.5 cursor-crosshair rounded-full border border-white bg-brass"
+        title="Drag from the start to link (SS or SF)"
+        onPointerDown={(e) => onHandleDown(activity, "start", e)}
+      />
+      <span
+        className="absolute -right-1.5 top-[2px] z-20 h-2.5 w-2.5 cursor-crosshair rounded-full border border-white bg-brass"
+        title="Drag from the finish to link (FS or FF)"
+        onPointerDown={(e) => onHandleDown(activity, "finish", e)}
+      />
+      <span
+        className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-black/20"
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onBarDown(activity, "resize", e);
+        }}
+      />
     </div>
   );
 }
@@ -296,7 +410,7 @@ function linkGeometry(
   all: ProgrammeActivity[],
   origin: Date,
   px: number,
-): Array<{ successorId: string; predecessorId: string; type: LinkType; lag: number; d: string; labelX: number; labelY: number }> {
+): Array<{ successorId: string; predecessorId: string; type: LinkType; lag: number; critical: boolean; d: string }> {
   const index = new Map(rows.map((a, i) => [a.id, i]));
   const out = [];
   for (const succ of rows) {
@@ -314,7 +428,7 @@ function linkGeometry(
       const y2 = HEAD + toRow * ROW + ROW / 2;
       const x1 = link.type === "SS" || link.type === "SF" ? fromBox.left : fromBox.left + fromBox.width;
       const x2 = link.type === "FF" || link.type === "SF" ? toBox.left + toBox.width : toBox.left;
-      const elbow = x1 + (x2 >= x1 ? 18 : -18);
+      const elbow = x1 + (x2 >= x1 ? 10 : -10);
       const d = Math.abs(y1 - y2) < 2
         ? `M ${x1} ${y1} L ${x2} ${y2}`
         : `M ${x1} ${y1} H ${elbow} V ${y2} H ${x2}`;
@@ -323,9 +437,8 @@ function linkGeometry(
         predecessorId: pred.id,
         type: link.type,
         lag: link.lagWorkingDays,
+        critical: Boolean(pred.critical && succ.critical),
         d,
-        labelX: elbow + 4,
-        labelY: (y1 + y2) / 2 - 3,
       });
     }
   }
@@ -359,14 +472,55 @@ function labelOf(activities: ProgrammeActivity[], id: string) {
   return activities.find((a) => a.id === id)?.activityId || id;
 }
 
+function predLabel(activity: ProgrammeActivity, outline: Map<string, number>, all: ProgrammeActivity[]) {
+  return activity.predecessors.map((p) => {
+    const id = outline.get(p.predecessorId) ?? all.find((a) => a.id === p.predecessorId)?.activityId ?? "?";
+    const lag = p.lagWorkingDays ? `+${p.lagWorkingDays}d` : "";
+    return `${id}${p.type}${lag}`;
+  }).join(", ");
+}
+
+function formatDuration(activity: ProgrammeActivity) {
+  if (activity.kind === "milestone") return "0d";
+  if (activity.durationWorkingDays == null) return "—";
+  const n = activity.durationWorkingDays;
+  const label = Number.isInteger(n) ? String(n) : n.toFixed(1);
+  return `${label}d`;
+}
+
+function shortDate(iso: string | null) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y.slice(2)}`;
+}
+
+function workingSpan(programme: ConstructionProgramme) {
+  const start = programme.activities.find((a) => a.activityKey === "milestone-start");
+  const finish = programme.activities.find((a) => a.activityKey === "milestone-finish");
+  if (start?.es != null && finish?.ef != null) return Math.max(0, Math.round(finish.ef - start.es));
+  return programme.activities.find((a) => a.parentId == null && a.kind === "summary")?.durationWorkingDays ?? "—";
+}
+
 function dateRange(programme: ConstructionProgramme) {
   const dates = programme.activities.flatMap((a) => [a.plannedStart, a.plannedFinish, programme.setup.commencementDate.value]).filter(Boolean) as string[];
   dates.sort();
   const start = parse(dates[0] || "2026-01-01");
   const finish = dates.at(-1) || dates[0] || "2026-01-31";
   const end = parse(finish);
-  const days = Math.min(180, Math.max(21, Math.round((end.getTime() - start.getTime()) / 86400000) + 7));
+  const days = Math.min(420, Math.max(28, Math.round((end.getTime() - start.getTime()) / 86400000) + 10));
   return { start, days };
+}
+
+function monthBands(start: Date, days: number) {
+  const bands: Array<{ key: string; label: string; days: number }> = [];
+  for (let i = 0; i < days; i += 1) {
+    const d = addDays(start, i);
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+    const last = bands.at(-1);
+    if (last && last.key === key) last.days += 1;
+    else bands.push({ key, label: `${month(d)} ${d.getUTCFullYear()}`, days: 1 });
+  }
+  return bands;
 }
 
 function barBox(activity: ProgrammeActivity, origin: Date, px: number) {
@@ -374,7 +528,7 @@ function barBox(activity: ProgrammeActivity, origin: Date, px: number) {
   const a = parse(activity.plannedStart);
   const b = parse(activity.plannedFinish);
   const left = Math.max(0, ((a.getTime() - origin.getTime()) / 86400000) * px);
-  const width = Math.max(px * 0.6, ((b.getTime() - a.getTime()) / 86400000 + 1) * px - 2);
+  const width = Math.max(px * 0.6, ((b.getTime() - origin.getTime()) / 86400000 - (a.getTime() - origin.getTime()) / 86400000 + 1) * px - 2);
   return { left, width };
 }
 

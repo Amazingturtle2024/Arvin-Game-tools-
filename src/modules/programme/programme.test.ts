@@ -165,6 +165,24 @@ describe("module 3 programme from modules 1 and 2", () => {
     const pads = programme.activities.find((a) => a.name.includes("Excavation — foundation pads"));
     expect(pads?.durationWorkingDays).toBeCloseTo(147 / 100, 2);
     expect(pads?.origin).toBe("recommendation");
+    const parentOf = (id: string | null) => programme.activities.find((a) => a.id === id);
+    expect(parentOf(pads?.parentId ?? null)?.name).toBe("Earthworks");
+    expect(programme.activities.some((a) => a.kind === "summary" && a.name === "Structural Works")).toBe(true);
+    expect(programme.activities.some((a) => a.kind === "summary" && a.name === "Foundation")).toBe(true);
+    expect(programme.activities.some((a) => a.kind === "summary" && a.name === "Foundation pads")).toBe(true);
+    const foundationDone = programme.activities.find((a) => a.activityKey === "milestone-foundation");
+    expect(foundationDone?.kind).toBe("milestone");
+    const rebar = programme.activities.find((a) => a.name.includes("Reinforcement — foundation pads"));
+    const form = programme.activities.find((a) => a.name.includes("Formwork — foundation pads"));
+    const conc = programme.activities.find((a) => a.name.includes("Concrete — foundation pads"));
+    expect(parentOf(form?.parentId ?? null)?.name).toBe("Foundation pads");
+    expect(rebar?.predecessors.some((p) => p.predecessorId === pads?.id && p.type === "FS")).toBe(true);
+    expect(form?.predecessors.some((p) => p.predecessorId === rebar?.id && p.type === "FS")).toBe(true);
+    expect(conc?.predecessors.some((p) => p.predecessorId === form?.id && p.type === "FS")).toBe(true);
+    expect(form?.plannedStart && pads?.plannedFinish && form.plannedStart >= pads.plannedFinish).toBeTruthy();
+    const foundationSummary = programme.activities.find((a) => a.kind === "summary" && a.name === "Foundation");
+    expect(foundationSummary?.plannedStart).toBeTruthy();
+    expect(foundationSummary?.plannedFinish).toBeTruthy();
     const curing = programme.activities.find((a) => a.name.startsWith("Curing"));
     expect(curing?.durationWorkingDays).toBeNull();
     expect(curing?.blockedReason).toMatch(/not been assumed|not stated/i);
@@ -215,12 +233,12 @@ describe("module 3 programme from modules 1 and 2", () => {
       previous: { ...programme, activities: prefixed },
       revision: 3,
     });
-    const conc = remapped.activities.find((a) => a.name.includes("Concrete — foundation pads"));
-    expect(conc?.approval).toBe("approved");
-    expect(conc?.durationWorkingDays).toBe(99);
-    expect(conc?.id.startsWith("prev-")).toBe(false);
-    expect(conc?.predecessors.every((p) => remapped.activities.some((a) => a.id === p.predecessorId))).toBe(true);
-    expect(conc?.predecessors.some((p) => p.predecessorId.startsWith("prev-"))).toBe(false);
+    const remappedConc = remapped.activities.find((a) => a.name.includes("Concrete — foundation pads"));
+    expect(remappedConc?.approval).toBe("approved");
+    expect(remappedConc?.durationWorkingDays).toBe(99);
+    expect(remappedConc?.id.startsWith("prev-")).toBe(false);
+    expect(remappedConc?.predecessors.every((p) => remapped.activities.some((a) => a.id === p.predecessorId))).toBe(true);
+    expect(remappedConc?.predecessors.some((p) => p.predecessorId.startsWith("prev-"))).toBe(false);
   });
 
   it("opens a new draft revision after a baseline instead of overwriting it", () => {
