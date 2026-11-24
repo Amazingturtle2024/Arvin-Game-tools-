@@ -102,10 +102,26 @@ function score(item: QuantityTakeoff, line: BoqLine): number {
   const desc = `${line.description} ${line.itemNo}`.toLowerCase();
   if (!words.some((w) => desc.includes(w))) return 0;
   let n = 2;
+  // Composite billed lines name more than one activity ("excavate and backfill").
+  // Prefer the activity named first so a later word cannot steal the line.
+  if (firstNamedActivity(desc) === item.activityKey) n += 8;
   for (const token of tokens(`${item.label} ${item.activityKey}`)) {
-    if (desc.includes(token)) n += token.match(/^\d/) ? 3 : 1;
+    const named = desc.includes(token) || words.some((w) => token.startsWith(w) || w.startsWith(token));
+    if (named) n += token.match(/^\d/) ? 3 : 1;
   }
   return n;
+}
+
+function firstNamedActivity(desc: string): string | null {
+  let hit: { key: string; at: number } | null = null;
+  for (const row of KEYWORDS) {
+    for (const word of row.words) {
+      const at = desc.indexOf(word);
+      if (at < 0) continue;
+      if (!hit || at < hit.at) hit = { key: row.key, at };
+    }
+  }
+  return hit?.key ?? null;
 }
 
 function tokens(text: string): string[] {

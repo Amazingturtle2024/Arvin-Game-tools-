@@ -212,8 +212,11 @@ describe("module 2 drawing take-off", () => {
       ],
       [{ itemNo: "C.1", description: "Excavate and backfill foundations", unit: "m3", quantity: 12, rate: null, amount: null, section: "Measured works", source: src }],
     );
-    expect(rows.filter((r) => r.boqItem?.includes("C.1"))).toHaveLength(1);
-    expect(rows.some((r) => r.status === "drawing_only")).toBe(true);
+    const billed = rows.filter((r) => r.boqItem?.includes("C.1"));
+    expect(billed).toHaveLength(1);
+    expect(billed[0].drawingItem).toBe("Pads");
+    expect(billed[0].drawingQty).toBe(10);
+    expect(rows.find((r) => r.drawingItem === "Backfill")?.status).toBe("drawing_only");
   });
 
   it("blocks duration when hours per day are zero", () => {
