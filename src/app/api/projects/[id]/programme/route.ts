@@ -7,6 +7,7 @@ import {
   programmeAudit,
   saveProgramme,
 } from "@/lib/programmes";
+import { getProject } from "@/lib/projects";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,6 +19,8 @@ export async function GET(
   const viewer = await requireViewer(request);
   if (viewer instanceof Response) return viewer;
   const { id } = await params;
+  const project = await getProject(ownerKey(viewer), id);
+  if (!project) return jsonError(404, "not_found");
   const programme = await latestProgramme(id);
   const revisions = await listProgrammeRevisions(id);
   const audit = await programmeAudit(id);
@@ -41,6 +44,7 @@ export async function POST(
     return jsonOk({ programme });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Programme failed.";
+    if (detail === "Project not found") return jsonError(404, "not_found");
     return jsonError(400, "programme_failed", detail);
   }
 }
@@ -61,6 +65,7 @@ export async function PUT(
     return jsonOk({ programme });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Save failed.";
+    if (detail === "Project not found") return jsonError(404, "not_found");
     return jsonError(400, "save_failed", detail);
   }
 }

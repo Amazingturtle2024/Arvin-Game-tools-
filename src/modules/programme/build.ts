@@ -286,7 +286,7 @@ function linkActivities(activities: ProgrammeActivity[]): ProgrammeActivity[] {
   if (finish) {
     const tails = out.filter((a) => a.kind === "task" && !out.some((b) => b.predecessors.some((p) => p.predecessorId === a.id) && b.kind !== "summary"));
     const preds = (tails.length ? tails : firstWorks).filter((a) => a.id !== finish.id);
-    update(finish.id, preds.slice(-6).map((a) => link(a.id, "FS", 0, "Completion follows remaining construction.")));
+    update(finish.id, preds.map((a) => link(a.id, "FS", 0, "Completion follows remaining construction.")));
   }
 
   return out;

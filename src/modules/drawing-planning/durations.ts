@@ -16,7 +16,8 @@ export function calculateDurations(takeoff: QuantityTakeoff[], rates: Production
     const rate = selectRate(rates, key, items[0].unit);
     const quantity = round(items.reduce((n, i) => n + i.quantity, 0));
     const unit = items[0].unit;
-    const unitMismatch = Boolean(rate && rate.unit.toLowerCase() !== unit.toLowerCase());
+    const otherUnit = !rate ? rates.find((r) => r.activity_key === key) : undefined;
+    const unitMismatch = Boolean(otherUnit);
     const hours = rate?.hours_per_day ?? 8;
     const teams = Math.max(rate?.teams ?? 1, 0);
     const invalidOutput = hours <= 0 || teams <= 0;
@@ -26,17 +27,17 @@ export function calculateDurations(takeoff: QuantityTakeoff[], rates: Production
         label: items.map((i) => i.label).join("; "),
         quantity,
         unit,
-        ratePerDay: rate?.rate_per_day ?? null,
-        teams: rate?.teams ?? 1,
+        ratePerDay: rate?.rate_per_day ?? otherUnit?.rate_per_day ?? null,
+        teams: rate?.teams ?? otherUnit?.teams ?? 1,
         hoursPerDay: hours,
-        daysPerWeek: rate?.days_per_week ?? 5,
-        weatherAllowancePct: rate?.weather_allowance_pct ?? 0,
+        daysPerWeek: rate?.days_per_week ?? otherUnit?.days_per_week ?? 5,
+        weatherAllowancePct: rate?.weather_allowance_pct ?? otherUnit?.weather_allowance_pct ?? 0,
         effectiveDaily: null,
         durationWorkingDays: null,
         calendarWeeks: null,
         formula: "Duration not calculated",
         blockedReason: unitMismatch
-          ? `The productivity table rate is in ${rate?.unit}, not ${unit}. Units are not mixed to invent a duration.`
+          ? `The productivity table rate is in ${otherUnit?.unit}, not ${unit}. Units are not mixed to invent a duration.`
           : invalidOutput
             ? "Hours per day and teams must be greater than zero. A duration has not been assumed."
             : "No production rate is entered for this activity. Enter a rate in the productivity table. A duration has not been assumed.",

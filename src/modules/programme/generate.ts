@@ -54,6 +54,8 @@ export function generateProgramme(input: {
 function mergeApproved(previous: ProgrammeActivity[], generated: ProgrammeActivity[]): ProgrammeActivity[] {
   const approved = previous.filter((a) => a.approval === "approved");
   if (!approved.length) return generated;
+  const idMap = mapPreviousIds(previous, generated);
+  const liveIds = new Set(generated.map((row) => row.id));
   const used = new Set<string>();
   return generated.map((row) => {
     if (row.kind === "summary") return row;
@@ -67,8 +69,24 @@ function mergeApproved(previous: ProgrammeActivity[], generated: ProgrammeActivi
       activityId: row.activityId,
       parentId: row.parentId,
       section: row.section,
+      predecessors: match.predecessors
+        .map((link) => ({ ...link, predecessorId: idMap.get(link.predecessorId) ?? link.predecessorId }))
+        .filter((link) => liveIds.has(link.predecessorId) && link.predecessorId !== row.id),
     };
   });
+}
+
+function mapPreviousIds(previous: ProgrammeActivity[], generated: ProgrammeActivity[]): Map<string, string> {
+  const used = new Set<string>();
+  const map = new Map<string, string>();
+  for (const row of generated) {
+    if (row.kind === "summary") continue;
+    const match = previous.find((a) => !used.has(a.id) && sameWork(a, row));
+    if (!match) continue;
+    used.add(match.id);
+    map.set(match.id, row.id);
+  }
+  return map;
 }
 
 function sameWork(a: ProgrammeActivity, b: ProgrammeActivity): boolean {

@@ -11,6 +11,7 @@ import { runCpm } from "./cpm";
 import { addLink, removeLink, updateLink } from "./links";
 import { calculateWorkingDays } from "./duration";
 import { generateProgramme } from "./generate";
+import { nextSaveMeta } from "./revision";
 import { programmeMspXml } from "./msp-xml";
 import { seedSetup } from "./seed";
 import type { ProgrammeActivity, ProgrammeSetup } from "./types";
@@ -186,6 +187,63 @@ describe("module 3 programme from modules 1 and 2", () => {
     const kept = again.activities.find((a) => a.name.includes("Site establishment"));
     expect(kept?.approval).toBe("approved");
     expect(kept?.durationWorkingDays).toBe(12);
+
+    const finish = programme.activities.find((a) => a.activityKey === "milestone-finish");
+    const orphans = programme.activities.filter((a) => (
+      a.kind === "task"
+      && a.activityKey !== "milestone-finish"
+      && !programme.activities.some((b) => b.predecessors.some((p) => p.predecessorId === a.id))
+    ));
+    expect(orphans).toEqual([]);
+    expect(finish?.predecessors.length).toBeGreaterThan(0);
+
+    const prefixed = programme.activities.map((a) => ({
+      ...a,
+      id: `prev-${a.id}`,
+      parentId: a.parentId ? `prev-${a.parentId}` : null,
+      predecessors: a.predecessors.map((p) => ({ ...p, predecessorId: `prev-${p.predecessorId}` })),
+      approval: a.name.includes("Concrete — foundation pads") ? "approved" as const : a.approval,
+      durationManual: a.name.includes("Concrete — foundation pads") ? true : a.durationManual,
+      durationWorkingDays: a.name.includes("Concrete — foundation pads") ? 99 : a.durationWorkingDays,
+    }));
+    const remapped = generateProgramme({
+      projectId: "p1",
+      projectName: "Riverside",
+      tender: tender.report,
+      drawings,
+      rates: rates(),
+      previous: { ...programme, activities: prefixed },
+      revision: 3,
+    });
+    const conc = remapped.activities.find((a) => a.name.includes("Concrete — foundation pads"));
+    expect(conc?.approval).toBe("approved");
+    expect(conc?.durationWorkingDays).toBe(99);
+    expect(conc?.id.startsWith("prev-")).toBe(false);
+    expect(conc?.predecessors.every((p) => remapped.activities.some((a) => a.id === p.predecessorId))).toBe(true);
+    expect(conc?.predecessors.some((p) => p.predecessorId.startsWith("prev-"))).toBe(false);
+  });
+
+  it("opens a new draft revision after a baseline instead of overwriting it", () => {
+    const previous = {
+      module: "programme" as const,
+      generatedAt: "",
+      projectId: "p",
+      revision: 4,
+      status: "baseline" as const,
+      setup: blankSetup(),
+      activities: [],
+      warnings: [],
+      criticalPath: [],
+      plannedCompletion: null,
+      contractCompletion: null,
+      methodology: [],
+      baselineOf: 4,
+    };
+    expect(nextSaveMeta(previous, { ...previous, status: "draft" })).toEqual({
+      revision: 5,
+      status: "draft",
+      baselineOf: 4,
+    });
   });
 
   it("recalculates dates when teams change and leaves a planner override", () => {

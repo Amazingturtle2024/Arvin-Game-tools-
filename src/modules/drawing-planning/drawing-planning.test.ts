@@ -280,6 +280,17 @@ describe("module 2 drawing take-off", () => {
     const bulk = MASTER_RATES.find((r) => /BULK, 70m3/i.test(r.label));
     expect(bulk?.rate_per_day).toBe(630);
     expect(selectRate(MASTER_RATES, "excavation", "m3")?.variant_key).not.toBe(bulk?.variant_key);
+    expect(selectRate(MASTER_RATES, "pipe", "kg")).toBeUndefined();
+    expect(selectRate(MASTER_RATES, "excavation", "t")).toBeUndefined();
+  });
+
+  it("does not invent a duration when the rate is in a different unit", () => {
+    const result = calculateDurations(
+      [qty("excavation", "Pads", "t", 12)],
+      rates(),
+    );
+    expect(result[0].durationWorkingDays).toBeNull();
+    expect(result[0].blockedReason).toMatch(/units are not mixed/i);
   });
 
   it("blocks duration when hours per day are zero", () => {

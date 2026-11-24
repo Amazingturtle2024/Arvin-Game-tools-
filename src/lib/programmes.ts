@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { applySchedule, diffProgrammes, generateProgramme } from "@/modules/programme";
+import { nextSaveMeta } from "@/modules/programme/revision";
 import type { ConstructionProgramme, ProgrammeRevisionSummary } from "@/modules/programme/types";
 import { sql } from "./db";
 import { getProject, latestDrawingReport, latestReport } from "./projects";
@@ -70,11 +71,13 @@ export async function saveProgramme(
   const project = await getProject(ownerId, projectId);
   if (!project) throw new Error("Project not found");
   const previous = await latestProgramme(projectId);
+  const meta = nextSaveMeta(previous, incoming);
   const programme = applySchedule({
     ...incoming,
     projectId,
-    revision: previous?.revision ?? incoming.revision ?? 1,
-    status: previous?.status === "baseline" ? "draft" : incoming.status === "baseline" ? previous?.status ?? "draft" : incoming.status,
+    revision: meta.revision,
+    status: meta.status,
+    baselineOf: meta.baselineOf,
   });
   await persist(ownerId, projectId, programme, previous, "save");
   return programme;
@@ -85,6 +88,8 @@ export async function approveProgramme(
   projectId: string,
   asBaseline: boolean,
 ): Promise<ConstructionProgramme> {
+  const project = await getProject(ownerId, projectId);
+  if (!project) throw new Error("Project not found");
   const previous = await latestProgramme(projectId);
   if (!previous) throw new Error("Build a programme before approving it.");
   const approved = applySchedule({
