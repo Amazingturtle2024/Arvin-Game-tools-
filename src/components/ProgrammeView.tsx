@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { GanttChart } from "./GanttChart";
+import { LinksEditor } from "./LinksEditor";
 import type { ConstructionProgramme, FieldOrigin, ProgrammeActivity, ProgrammeRevisionSummary, ProgrammeSetup } from "@/modules/programme/types";
 
 const TABS = ["Setup", "Schedule", "Gantt", "CPM", "Checks", "Revisions"] as const;
@@ -141,7 +142,7 @@ export function ProgrammeView({ projectId }: { projectId: string }) {
         <ScheduleTable
           programme={programme}
           onChange={(activities) => setProgramme({ ...programme, activities })}
-          onApply={() => void save(programme)}
+          onCommit={(activities) => void save({ ...programme, activities })}
         />
       ) : null}
       {tab === "Gantt" ? (
@@ -281,11 +282,11 @@ function OriginBadge({ origin, source }: { origin: FieldOrigin; source: string |
 function ScheduleTable({
   programme,
   onChange,
-  onApply,
+  onCommit,
 }: {
   programme: ConstructionProgramme;
   onChange: (activities: ProgrammeActivity[]) => void;
-  onApply: () => void;
+  onCommit: (activities: ProgrammeActivity[]) => void;
 }) {
   function patch(id: string, next: Partial<ProgrammeActivity>) {
     onChange(programme.activities.map((a) => (
@@ -296,12 +297,12 @@ function ScheduleTable({
   }
   return (
     <div className="space-y-3">
-      <p className="text-sm text-ink/70">Every cell is editable. Recalculate after quantity, rate, teams, lag or calendar changes. Approved rows are not rewritten by a rebuild.</p>
+      <p className="text-sm text-ink/70">Every cell is editable. Change predecessor, relationship (FS/SS/FF/SF) and lag at any time — the sequence recalculates as soon as you edit a link. Recalculate after quantity, rate or team changes. Approved rows are not rewritten by a rebuild.</p>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1400px] text-left text-xs">
+        <table className="w-full min-w-[1500px] text-left text-xs">
           <thead className="text-[10px] uppercase tracking-wider text-ink/60">
             <tr>
-              {["WBS", "ID", "Activity", "BOQ", "Drawing", "Qty", "Unit", "Rate/d", "Teams", "Days", "Override", "Pred", "Rel", "Lag", "Start", "Finish", "Owner", "Status", "%", "Tag"].map((h) => (
+              {["WBS", "ID", "Activity", "BOQ", "Drawing", "Qty", "Unit", "Rate/d", "Teams", "Days", "Override", "Sequence (pred / type / lag)", "Start", "Finish", "Owner", "Status", "%", "Tag"].map((h) => (
                 <th key={h} className="py-1 pr-2 font-medium">{h}</th>
               ))}
             </tr>
@@ -328,9 +329,19 @@ function ScheduleTable({
                     onChange={(e) => patch(a.id, { durationManual: e.target.value !== "", durationWorkingDays: e.target.value === "" ? a.durationWorkingDays : Number(e.target.value) })}
                   />
                 </td>
-                <td className="py-1 pr-2"><input className="field w-20" value={a.predecessors.map((p) => p.predecessorId).join(",")} onChange={(e) => patch(a.id, { predecessors: parsePreds(e.target.value, a.predecessors) })} /></td>
-                <td className="py-1 pr-2"><input className="field w-16" value={a.predecessors.map((p) => p.type).join(",")} onChange={(e) => patch(a.id, { predecessors: a.predecessors.map((p, i) => ({ ...p, type: (e.target.value.split(",")[i]?.trim() as ProgrammeActivity["predecessors"][number]["type"]) || p.type })) })} /></td>
-                <td className="py-1 pr-2"><input className="field w-12" value={a.predecessors.map((p) => p.lagWorkingDays).join(",")} onChange={(e) => patch(a.id, { predecessors: a.predecessors.map((p, i) => ({ ...p, lagWorkingDays: Number(e.target.value.split(",")[i] ?? p.lagWorkingDays) })) })} /></td>
+                <td className="py-1 pr-2 min-w-[280px]">
+                  {a.kind === "summary" ? <span className="text-ink/40">—</span> : (
+                    <LinksEditor
+                      compact
+                      activity={a}
+                      activities={programme.activities}
+                      onChange={(next) => {
+                        onChange(next);
+                        onCommit(next);
+                      }}
+                    />
+                  )}
+                </td>
                 <td className="py-1 pr-2 font-mono">{a.plannedStart ?? "—"}</td>
                 <td className="py-1 pr-2 font-mono">{a.plannedFinish ?? "—"}</td>
                 <td className="py-1 pr-2"><input className="field w-24" value={a.responsible} onChange={(e) => patch(a.id, { responsible: e.target.value })} /></td>
@@ -348,15 +359,9 @@ function ScheduleTable({
           </tbody>
         </table>
       </div>
-      <button type="button" onClick={onApply} className="bg-moss px-4 py-2 text-sm text-paper">Recalculate dates</button>
+      <button type="button" onClick={() => onCommit(programme.activities)} className="bg-moss px-4 py-2 text-sm text-paper">Recalculate dates</button>
     </div>
   );
-}
-
-function parsePreds(text: string, current: ProgrammeActivity["predecessors"]): ProgrammeActivity["predecessors"] {
-  return text.split(/[,\s]+/).filter(Boolean).map((id, i) => current[i] ? { ...current[i], predecessorId: id, origin: "user" } : {
-    predecessorId: id, type: "FS", lagWorkingDays: 0, origin: "user", why: "Planner entered.",
-  });
 }
 
 function CpmTable({ activities }: { activities: ProgrammeActivity[] }) {

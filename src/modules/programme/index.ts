@@ -1,4 +1,5 @@
 export { applySchedule } from "./apply";
+export { addLink, removeLink, replacePredecessor, updateLink } from "./links";
 export { generateProgramme } from "./generate";
 export { seedSetup } from "./seed";
 export { programmeWorkbook } from "./excel";

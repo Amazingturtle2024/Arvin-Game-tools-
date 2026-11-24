@@ -17,6 +17,7 @@ export function HomeClient() {
   const [error, setError] = useState("");
   const [viewer, setViewer] = useState<{ name: string; simulated?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
 
   async function load() {
     const me = await fetch("/api/me").then((r) => r.json());
@@ -51,6 +52,19 @@ export function HomeClient() {
     router.push(`/projects/${data.project.id}`);
   }
 
+  async function openDemo() {
+    setDemoBusy(true);
+    setError("");
+    const response = await fetch("/api/projects/demo", { method: "POST" });
+    const data = await response.json();
+    setDemoBusy(false);
+    if (!response.ok) {
+      setError(data.detail || "Could not build the Riverside demo.");
+      return;
+    }
+    router.push(`/projects/${data.projectId}?module=programme`);
+  }
+
   return (
     <div className="space-y-8">
       <section className="border border-rule bg-sheet p-6 shadow-[6px_6px_0_rgba(28,42,36,0.08)]">
@@ -61,6 +75,17 @@ export function HomeClient() {
           billed item with the measured quantity, without changing either figure. Module 03 builds an editable Gantt chart
           and critical path from those quantities, without inventing missing rates or dates.
         </p>
+        <p className="mt-3 max-w-2xl text-sm text-ink/70">
+          Open the Riverside demo to see a finished sample: NEC4 Option A tender, measured pad footings, BOQ versus drawings, and a Gantt with critical path.
+        </p>
+        <button
+          type="button"
+          onClick={() => void openDemo()}
+          disabled={demoBusy || busy}
+          className="mt-4 bg-moss px-5 py-2 text-sm text-paper disabled:opacity-60"
+        >
+          {demoBusy ? "Building demo…" : "Open Riverside demo"}
+        </button>
         {viewer ? (
           <p className="mt-4 text-xs text-ink/60">
             Desk for {viewer.name}

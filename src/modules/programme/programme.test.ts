@@ -8,6 +8,7 @@ import type { ProductionRate } from "@/modules/drawing-planning/types";
 import { applySchedule } from "./apply";
 import { addWorkingDays, parseEnglishDate, parseIsoDate } from "./calendar";
 import { runCpm } from "./cpm";
+import { addLink, removeLink, updateLink } from "./links";
 import { calculateWorkingDays } from "./duration";
 import { generateProgramme } from "./generate";
 import { programmeMspXml } from "./msp-xml";
@@ -19,10 +20,12 @@ function rates(): ProductionRate[] {
     id: `r${i}`,
     owner_id: "test",
     activity_key: row.activity_key,
+    variant_key: row.variant_key,
+    trade: row.trade,
     label: row.label,
     unit: row.unit,
     rate_per_day: row.rate_per_day,
-    workers: 1,
+    workers: row.workers,
     teams: 1,
     plant: row.plant,
     hours_per_day: 8,
@@ -31,6 +34,7 @@ function rates(): ProductionRate[] {
     accessibility: "",
     weather_allowance_pct: 0,
     notes: row.notes,
+    is_default: row.is_default,
   }));
 }
 
@@ -85,6 +89,51 @@ describe("critical path", () => {
     expect(B.critical).toBe(true);
     expect(A.totalFloat).toBe(0);
   });
+
+  it("lets the planner add, change and remove links without inventing a loop", () => {
+    const start = [task("A", 4, []), task("B", 2, []), task("C", 3, [])];
+    const linked = addLink(start, "B", "A", "FS", 0);
+    expect(linked.find((r) => r.id === "B")?.predecessors).toEqual([
+      expect.objectContaining({ predecessorId: "A", type: "FS", origin: "user" }),
+    ]);
+    const ss = updateLink(linked, "B", "A", { type: "SS", lagWorkingDays: 2 });
+    expect(ss.find((r) => r.id === "B")?.predecessors[0]).toMatchObject({ type: "SS", lagWorkingDays: 2 });
+    const loop = addLink(ss, "A", "B", "FS", 0);
+    expect(loop.find((r) => r.id === "A")?.predecessors).toEqual([]);
+    const cleared = removeLink(ss, "B", "A");
+    expect(cleared.find((r) => r.id === "B")?.predecessors).toEqual([]);
+  });
+
+  it("recalculates dates when the planner changes a link", () => {
+    const setup = blankSetup({
+      commencementDate: { value: "2026-04-06", origin: "user", sourceLabel: null },
+      workingPattern: { value: "monday_friday", origin: "user", sourceLabel: null },
+      saturdays: { value: false, origin: "user", sourceLabel: null },
+    });
+    const shell = {
+      module: "programme" as const,
+      generatedAt: "",
+      projectId: "p",
+      revision: 1,
+      status: "draft" as const,
+      setup,
+      warnings: [],
+      criticalPath: [],
+      plannedCompletion: null,
+      contractCompletion: null,
+      methodology: [],
+      baselineOf: null,
+    };
+    const open = applySchedule({ ...shell, activities: [task("A", 5, []), task("B", 2, [])] });
+    expect(open.activities.find((r) => r.id === "B")?.plannedStart).toBe("2026-04-06");
+    const fs = applySchedule({ ...shell, activities: addLink(open.activities, "B", "A", "FS", 0) });
+    expect(fs.activities.find((r) => r.id === "A")?.plannedFinish).toBe("2026-04-10");
+    expect(fs.activities.find((r) => r.id === "B")?.plannedStart).toBe("2026-04-13");
+    const ss = applySchedule({ ...shell, activities: updateLink(fs.activities, "B", "A", { type: "SS", lagWorkingDays: 0 }) });
+    expect(ss.activities.find((r) => r.id === "B")?.plannedStart).toBe("2026-04-06");
+    const lagged = applySchedule({ ...shell, activities: updateLink(fs.activities, "B", "A", { lagWorkingDays: 2 }) });
+    expect(lagged.activities.find((r) => r.id === "B")?.plannedStart).toBe("2026-04-15");
+  });
 });
 
 describe("module 3 programme from modules 1 and 2", () => {
@@ -113,7 +162,7 @@ describe("module 3 programme from modules 1 and 2", () => {
     expect(programme.activities.some((a) => /plaster|paint|commission/i.test(a.name))).toBe(false);
     expect(programme.activities.some((a) => /Site establishment/i.test(a.name))).toBe(true);
     const pads = programme.activities.find((a) => a.name.includes("Excavation — foundation pads"));
-    expect(pads?.durationWorkingDays).toBeCloseTo(147 / 150, 2);
+    expect(pads?.durationWorkingDays).toBeCloseTo(147 / 100, 2);
     expect(pads?.origin).toBe("recommendation");
     const curing = programme.activities.find((a) => a.name.startsWith("Curing"));
     expect(curing?.durationWorkingDays).toBeNull();

@@ -22,7 +22,7 @@ npm test
 npm run dev
 ```
 
-Open http://127.0.0.1:3000. On this machine the signed-in viewer is simulated.
+Open http://127.0.0.1:3000. On this machine the signed-in viewer is simulated. Click **Open Riverside demo** to load the sample tender, drawings and a built Gantt in one step.
 
 ## Rules the extractor follows
 

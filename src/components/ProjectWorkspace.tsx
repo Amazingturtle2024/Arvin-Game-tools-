@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DrawingReportView } from "./DrawingReportView";
 import { ProgrammeView } from "./ProgrammeView";
@@ -24,12 +25,16 @@ type Doc = {
 };
 
 export function ProjectWorkspace({ projectId }: { projectId: string }) {
+  const search = useSearchParams();
+  const requested = search.get("module");
   const [name, setName] = useState("Review");
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [report, setReport] = useState<TenderReviewReport | null>(null);
   const [drawingReport, setDrawingReport] = useState<DrawingPlanningReport | null>(null);
   const [rates, setRates] = useState<ProductionRate[]>([]);
-  const [moduleId, setModuleId] = useState<"document-analysis" | "drawing-planning" | "programme">("document-analysis");
+  const [moduleId, setModuleId] = useState<"document-analysis" | "drawing-planning" | "programme">(
+    requested === "programme" ? "programme" : requested === "drawing-planning" ? "drawing-planning" : "document-analysis",
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [drag, setDrag] = useState(false);

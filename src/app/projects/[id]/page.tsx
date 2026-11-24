@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ProjectWorkspace } from "@/components/ProjectWorkspace";
 
@@ -7,7 +8,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   return (
     <AppShell>
-      <ProjectWorkspace projectId={id} />
+      <Suspense fallback={<p className="text-sm text-ink/55">Opening review…</p>}>
+        <ProjectWorkspace projectId={id} />
+      </Suspense>
     </AppShell>
   );
 }
