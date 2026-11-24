@@ -15,6 +15,7 @@ const KEYWORDS: Array<{ key: string; words: string[] }> = [
 ];
 
 const STOP = new Set(["the", "and", "for", "with", "from", "into", "onto", "dia", "nr", "item"]);
+const INCLUDED_IN_PRIMARY = new Set(["backfill", "compaction"]);
 
 export function compareBoq(takeoff: QuantityTakeoff[], boq: BoqLine[]): BoqVariance[] {
   const items = takeoff.filter((t) => t.complete && t.quantity > 0);
@@ -100,28 +101,54 @@ function score(item: QuantityTakeoff, line: BoqLine): number {
   if (normalizeUnit(line.unit) !== normalizeUnit(item.unit)) return 0;
   const words = KEYWORDS.find((k) => k.key === item.activityKey)?.words ?? [item.activityKey];
   const desc = `${line.description} ${line.itemNo}`.toLowerCase();
-  if (!words.some((w) => desc.includes(w))) return 0;
+  const named = keywordHits(desc);
+  if (!named.some((h) => h.key === item.activityKey)) return 0;
+  const primary = primaryActivity(named, desc);
+  if (INCLUDED_IN_PRIMARY.has(item.activityKey) && primary !== item.activityKey) return 0;
   let n = 2;
-  // Composite billed lines name more than one activity ("excavate and backfill").
-  // Prefer the activity named first so a later word cannot steal the line.
-  if (firstNamedActivity(desc) === item.activityKey) n += 8;
-  for (const token of tokens(`${item.label} ${item.activityKey}`)) {
-    const named = desc.includes(token) || words.some((w) => token.startsWith(w) || w.startsWith(token));
-    if (named) n += token.match(/^\d/) ? 3 : 1;
+  if (primary === item.activityKey) n += 2;
+  for (const token of tokens(item.label)) {
+    if (isActivityToken(token, item.activityKey, words)) continue;
+    if (desc.includes(token)) n += token.match(/^\d/) ? 3 : 1;
   }
   return n;
 }
 
-function firstNamedActivity(desc: string): string | null {
-  let hit: { key: string; at: number } | null = null;
-  for (const row of KEYWORDS) {
-    for (const word of row.words) {
-      const at = desc.indexOf(word);
-      if (at < 0) continue;
-      if (!hit || at < hit.at) hit = { key: row.key, at };
+function primaryActivity(hits: Array<{ key: string; start: number; end: number }>, desc: string): string | null {
+  if (!hits.length) return null;
+  const first = hits[0];
+  const next = hits.find((h) => h.start >= first.end);
+  if (next && desc.slice(first.end, next.start).trim() === "") return next.key;
+  return first.key;
+}
+
+function keywordHits(desc: string): Array<{ key: string; start: number; end: number }> {
+  const hits: Array<{ key: string; start: number; end: number }> = [];
+  const re = /[a-z0-9]+(?:-[a-z0-9]+)*/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(desc))) {
+    const token = match[0];
+    for (const row of KEYWORDS) {
+      for (const stem of row.words) {
+        if (!tokenMatchesStem(token, stem)) continue;
+        hits.push({ key: row.key, start: match.index, end: match.index + token.length });
+      }
     }
   }
-  return hit?.key ?? null;
+  return hits.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+function tokenMatchesStem(token: string, stem: string): boolean {
+  const t = token.replace(/-/g, "");
+  const s = stem.replace(/-/g, "");
+  if (!t.startsWith(s)) return false;
+  if (s.length >= 5) return true;
+  return /^(s|age|ages|work|works|way|ways)?$/.test(t.slice(s.length));
+}
+
+function isActivityToken(token: string, activityKey: string, words: string[]): boolean {
+  if (token === activityKey) return true;
+  return words.some((w) => token.startsWith(w.replace(/-/g, "")) || w.replace(/-/g, "").startsWith(token));
 }
 
 function tokens(text: string): string[] {

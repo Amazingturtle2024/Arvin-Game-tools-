@@ -219,6 +219,38 @@ describe("module 2 drawing take-off", () => {
     expect(rows.find((r) => r.drawingItem === "Backfill")?.status).toBe("drawing_only");
   });
 
+  it("does not let a leading modifier or included fill steal the billed activity", () => {
+    const src = {
+      documentId: "b",
+      documentName: "boq.xlsx",
+      page: null,
+      sheet: "Bill",
+      row: 2,
+      heading: null,
+      clause: null,
+      quote: "road excavation",
+      locationLabel: "Bill r.2",
+    };
+    const road = compareBoq(
+      [
+        qty("roadworks", "Roadworks layer", "m3", 18.7),
+        qty("excavation", "Trench excavation", "m3", 40),
+      ],
+      [{ itemNo: "C.4", description: "Road excavation", unit: "m3", quantity: 40, rate: null, amount: null, section: "Measured works", source: src }],
+    );
+    expect(road.find((r) => r.boqItem?.includes("C.4"))?.drawingItem).toBe("Trench excavation");
+    expect(road.find((r) => r.drawingItem === "Roadworks layer")?.status).toBe("drawing_only");
+
+    const fill = compareBoq(
+      [
+        qty("excavation", "Pads", "m3", 10),
+        qty("backfill", "Backfill", "m3", 8),
+      ],
+      [{ itemNo: "C.5", description: "Backfill to excavations", unit: "m3", quantity: 8, rate: null, amount: null, section: "Measured works", source: { ...src, row: 3, quote: "backfill to excavations" } }],
+    );
+    expect(fill.find((r) => r.boqItem?.includes("C.5"))?.drawingItem).toBe("Backfill");
+  });
+
   it("blocks duration when hours per day are zero", () => {
     const result = calculateDurations(
       [qty("excavation", "Pads", "m3", 150)],
