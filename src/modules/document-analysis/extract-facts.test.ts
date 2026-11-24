@@ -161,11 +161,18 @@ describe("citations and classification", () => {
 
   it("prefers the file the model named when the quote exists in two files", () => {
     const docs = [
-      doc({ documentId: "a", filename: "first.pdf", fullText: "The delay damages are £8,500 per day of delay." }),
+      doc({ documentId: "a", filename: "Amended Contract Data.pdf", fullText: "The delay damages are £8,500 per day of delay." }),
       doc({ documentId: "b", filename: "Contract Data.pdf", fullText: "The delay damages are £8,500 per day of delay." }),
     ];
     const found = locateQuote("delay damages are £8,500 per day", docs, "Contract Data.pdf");
     expect(found?.doc.filename).toBe("Contract Data.pdf");
+  });
+
+  it("classifies a drawing number with a revision suffix as a drawing", () => {
+    const role = classifyDocument("ABC-DRG-001_Rev2.pdf", [
+      { text: "Notes.", page: 1, sheet: null, row: null, heading: null },
+    ]);
+    expect(role.role).toBe("drawings");
   });
 });
 

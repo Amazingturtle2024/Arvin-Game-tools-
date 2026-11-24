@@ -71,9 +71,9 @@ async function seedRates(ownerId: string): Promise<void> {
 }
 
 function hoursPerDay(value: number | null | undefined): number {
-  return value != null && value > 0 ? value : 8;
+  return value == null || Number.isNaN(value) ? 8 : value;
 }
 
 function teamsCount(value: number | null | undefined): number {
-  return value != null && value > 0 ? value : 1;
+  return value == null || Number.isNaN(value) ? 1 : value;
 }

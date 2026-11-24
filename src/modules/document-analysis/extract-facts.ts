@@ -465,9 +465,11 @@ export function locateQuote(
 }
 
 function namesMatch(filename: string, preferred: string): boolean {
-  const a = collapse(filename);
-  const b = collapse(preferred);
-  return a === b || a.includes(b) || b.includes(a);
+  return stem(filename) === stem(preferred);
+}
+
+function stem(name: string): string {
+  return collapse(name.replace(/\.[a-z0-9]+$/i, ""));
 }
 
 function bestUnitForQuote(needle: string, units: TextUnit[]): TextUnit | null {
