@@ -1,4 +1,4 @@
-import { quoteExistsInDocuments } from "./extract-facts";
+import { locateQuote } from "./extract-facts";
 import { locationLabel } from "./parse";
 import type { ExtractedFact, ParsedDocument } from "./types";
 
@@ -79,12 +79,15 @@ ${corpus}`;
         discarded += 1;
         continue;
       }
-      if (!quoteExistsInDocuments(item.quote, docs)) {
+      const located = locateQuote(item.quote, docs);
+      if (!located) {
         discarded += 1;
         continue;
       }
-      const doc = docs.find((d) => d.filename === item.documentName) ?? docs.find((d) => d.fullText.includes(item.quote)) ?? docs[0];
-      const unit = doc.units.find((u) => u.text.includes(item.quote)) ?? doc.units[0];
+      const { doc, unit } = located;
+      const clauseFromQuote = item.clause && item.quote.toLowerCase().includes(String(item.clause).toLowerCase())
+        ? item.clause
+        : null;
       i += 1;
       facts.push({
         id: `M${String(i).padStart(4, "0")}`,
@@ -95,18 +98,13 @@ ${corpus}`;
         source: {
           documentId: doc.documentId,
           documentName: doc.filename,
-          page: item.page ?? unit?.page ?? null,
-          sheet: item.sheet ?? unit?.sheet ?? null,
-          row: item.row ?? unit?.row ?? null,
-          heading: unit?.heading ?? null,
-          clause: item.clause ?? null,
+          page: unit.page,
+          sheet: unit.sheet,
+          row: unit.row,
+          heading: unit.heading,
+          clause: clauseFromQuote,
           quote: item.quote.slice(0, 400),
-          locationLabel: locationLabel({
-            page: item.page ?? unit?.page ?? null,
-            sheet: item.sheet ?? unit?.sheet ?? null,
-            row: item.row ?? unit?.row ?? null,
-            heading: unit?.heading ?? null,
-          }, item.clause),
+          locationLabel: locationLabel(unit, clauseFromQuote),
         },
         layer: item.layer || "unclear",
         verification: "extracted",

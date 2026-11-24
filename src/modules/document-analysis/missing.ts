@@ -23,12 +23,9 @@ const REQUIRED: Array<{ field: string; label: string; whyItMatters: string; rela
 
 export function findMissing(docs: ParsedDocument[], facts: ExtractedFact[]): MissingItem[] {
   const have = new Set(facts.map((f) => f.field));
-  const roles = new Set(docs.map((d) => d.role));
   const missing: MissingItem[] = [];
   for (const item of REQUIRED) {
     if (have.has(item.field)) continue;
-    if (item.field === "boq_item_count" && roles.has("boq")) continue;
-    if (item.field === "spec_section" && roles.has("specification") && facts.some((f) => f.category === "scope")) continue;
     missing.push({
       field: item.field,
       label: item.label,

@@ -103,22 +103,23 @@ export function contractFinding(facts: ExtractedFact[]): ContractFinding {
 }
 
 function boqSummary(docs: ParsedDocument[], facts: ExtractedFact[]): BoqSummary {
-  const boqDocs = docs.filter((d) => d.role === "boq" || d.kind === "xlsx");
+  const countFact = facts.find((f) => f.field === "boq_item_count");
   const sections = facts.filter((f) => f.field === "boq_section").map((f) => f.value);
   const totals = facts.filter((f) => f.field === "boq_total").map((f) => ({
     label: f.label,
     value: f.value,
     source: f.source,
   }));
-  const countFact = facts.find((f) => f.field === "boq_item_count");
+  const boqDocs = docs.filter((d) => d.role === "boq");
+  const found = Boolean(countFact) || totals.length > 0;
   return {
-    found: boqDocs.length > 0 || Boolean(countFact),
+    found,
     sheetCount: boqDocs.reduce((n, d) => n + d.sheetNames.length, 0),
     itemCount: countFact ? Number(countFact.value) : null,
     sections: [...new Set(sections)],
     totals,
-    notes: boqDocs.length === 0 && !countFact
-      ? ["No bill of quantities or activity schedule was identified in the upload."]
-      : [],
+    notes: found
+      ? []
+      : ["No bill of quantities or activity schedule was identified from item rows or stated totals. Spreadsheets are not treated as bills unless bill items are present."],
   };
 }

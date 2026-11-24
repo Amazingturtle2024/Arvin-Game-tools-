@@ -8,6 +8,8 @@ export function AppShell({
   children: React.ReactNode;
   active?: string;
 }) {
+  const current = PLANNER_MODULES.find((m) => m.id === active);
+  const liveCodes = PLANNER_MODULES.filter((m) => m.status === "ready").map((m) => m.code);
   return (
     <div className="min-h-screen">
       <header className="no-print border-b border-rule/80 bg-sheet/80">
@@ -18,7 +20,9 @@ export function AppShell({
               Planform
             </Link>
           </div>
-          <div className="stamp text-moss">Module 01 · Review</div>
+          <div className="stamp text-moss">
+            Modules {liveCodes.join("–")} · {current?.status === "ready" ? "Live" : "Later"}
+          </div>
         </div>
       </header>
       <div className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[220px_1fr]">

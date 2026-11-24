@@ -1,11 +1,9 @@
 import { jsonError, jsonOk, ownerKey, requireViewer } from "@/lib/auth";
-import { addDocument, getProject } from "@/lib/projects";
-import { MAX_FILE_BYTES } from "@/modules/document-analysis";
+import { addDocuments, getProject } from "@/lib/projects";
+import { validateUploadList } from "@/lib/uploads";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const ALLOWED_EXT = /\.(pdf|docx|xlsx|xls|txt)$/i;
 
 export async function POST(
   request: Request,
@@ -19,29 +17,24 @@ export async function POST(
 
   const form = await request.formData();
   const files = form.getAll("files").filter((f): f is File => f instanceof File);
-  if (files.length === 0) return jsonError(400, "no_files", "Attach one or more PDF, Word or Excel files.");
+  const invalid = validateUploadList(files);
+  if (invalid) return jsonError(400, "invalid_upload", invalid);
 
-  const saved = [];
+  const prepared = [];
   for (const file of files) {
-    if (!ALLOWED_EXT.test(file.name)) {
-      return jsonError(400, "unsupported_type", `${file.name} is not a PDF, Word or Excel file.`);
-    }
-    if (file.size > MAX_FILE_BYTES) {
-      return jsonError(400, "too_large", `${file.name} is larger than 15 MB.`);
-    }
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const row = await addDocument({
-      projectId: id,
+    prepared.push({
       filename: file.name,
       mime: file.type || "application/octet-stream",
-      bytes,
+      bytes: Buffer.from(await file.arrayBuffer()),
     });
-    saved.push({
+  }
+  const saved = await addDocuments(id, prepared);
+  return jsonOk({
+    documents: saved.map((row) => ({
       id: row.id,
       filename: row.filename,
       mime: row.mime,
       byte_size: row.byte_size,
-    });
-  }
-  return jsonOk({ documents: saved }, 201);
+    })),
+  }, 201);
 }

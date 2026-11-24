@@ -57,8 +57,8 @@ export function HomeClient() {
         <p className="font-mono text-xs tracking-[0.18em] text-brass uppercase">Before the programme</p>
         <h1 className="mt-2 font-serif text-4xl leading-tight">Tender &amp; Contract Review</h1>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink/80">
-          Upload the tender pack, conditions, specifications and bills. Planform reads only what those files say,
-          cites the page or clause, and leaves blank what they do not state. It will not guess a contract form.
+          Module 01 reads the tender and contract. Module 02 reads drawings, takes off quantities with formulas, and
+          turns your production rates into working-day durations. Nothing is guessed: missing dimensions stay missing.
         </p>
         {viewer ? (
           <p className="mt-4 text-xs text-ink/60">

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { analyzeDocuments } from "./index";
 import { contractFinding } from "./report";
-import { extractFacts, resetFactIds } from "./extract-facts";
+import { extractFacts, locateQuote, resetFactIds } from "./extract-facts";
+import { classifyDocument } from "./classify";
 import { findConflicts } from "./conflicts";
 import { findMissing } from "./missing";
 import { buildSampleTenderPack } from "./sample-pack";
@@ -136,6 +137,29 @@ describe("conflicts and gaps", () => {
   });
 });
 
+describe("citations and classification", () => {
+  it("locates a quote that spans two PDF lines", () => {
+    const found = locateQuote("delay damages are £8,500 per day", [
+      doc({
+        filename: "cd.pdf",
+        fullText: "The delay damages are £8,500 per day of delay.",
+        units: [
+          { text: "The delay damages are", page: 1, sheet: null, row: null, heading: null },
+          { text: "£8,500 per day of delay.", page: 1, sheet: null, row: null, heading: null },
+        ],
+      }),
+    ]);
+    expect(found?.doc.filename).toBe("cd.pdf");
+  });
+
+  it("does not treat a specification section file as a drawing", () => {
+    const role = classifyDocument("Specification Section A.pdf", [
+      { text: "Section A — Preliminaries. Testing of concrete to BS 8500.", page: 1, sheet: null, row: null, heading: null },
+    ]);
+    expect(role.role).toBe("specification");
+  });
+});
+
 describe("sample tender pack", () => {
   it("extracts NEC4, Z-clause weather transfer, BOQ items and a duration conflict", async () => {
     const files = await buildSampleTenderPack();
@@ -153,6 +177,7 @@ describe("sample tender pack", () => {
     expect(report.contract.family).toBe("NEC4");
     expect(report.money.some((f) => f.field === "retention" && /5%/.test(f.value))).toBe(true);
     expect(report.projectDetails.filter((f) => f.field === "site").every((f) => /Mill Lane/i.test(f.value))).toBe(true);
+    expect(report.specifications.some((f) => /section/i.test(f.value))).toBe(true);
     expect(report.amendments.some((f) => /Z1/i.test(f.value) && /weather/i.test(f.value))).toBe(true);
     expect(report.boq.found).toBe(true);
     expect((report.boq.itemCount ?? 0) >= 4).toBe(true);

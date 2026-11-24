@@ -1,0 +1,72 @@
+import { randomUUID } from "node:crypto";
+import { STARTER_RATES } from "@/modules/drawing-planning/starter-rates";
+import type { ProductionRate } from "@/modules/drawing-planning/types";
+import { sql } from "./db";
+
+export async function listRates(ownerId: string): Promise<ProductionRate[]> {
+  await seedRates(ownerId);
+  return sql<ProductionRate>(
+    `select id, owner_id, activity_key, label, unit, rate_per_day, workers, teams, plant,
+            hours_per_day, days_per_week, site_conditions, accessibility, weather_allowance_pct, notes
+     from production_rates where owner_id = $1 order by label`,
+    [ownerId],
+  );
+}
+
+export async function saveRates(ownerId: string, rates: Partial<ProductionRate>[]): Promise<ProductionRate[]> {
+  for (const rate of rates) {
+    if (!rate.activity_key) continue;
+    await sql(
+      `insert into production_rates (
+         id, owner_id, activity_key, label, unit, rate_per_day, workers, teams, plant,
+         hours_per_day, days_per_week, site_conditions, accessibility, weather_allowance_pct, notes
+       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       on conflict (owner_id, activity_key) do update set
+         label = excluded.label,
+         unit = excluded.unit,
+         rate_per_day = excluded.rate_per_day,
+         workers = excluded.workers,
+         teams = excluded.teams,
+         plant = excluded.plant,
+         hours_per_day = excluded.hours_per_day,
+         days_per_week = excluded.days_per_week,
+         site_conditions = excluded.site_conditions,
+         accessibility = excluded.accessibility,
+         weather_allowance_pct = excluded.weather_allowance_pct,
+         notes = excluded.notes,
+         updated_at = now()`,
+      [
+        rate.id || randomUUID(),
+        ownerId,
+        rate.activity_key,
+        rate.label || rate.activity_key,
+        rate.unit || "m3",
+        rate.rate_per_day ?? null,
+        rate.workers ?? 1,
+        rate.teams ?? 1,
+        rate.plant ?? "",
+        rate.hours_per_day ?? 8,
+        rate.days_per_week ?? 5,
+        rate.site_conditions ?? "",
+        rate.accessibility ?? "",
+        rate.weather_allowance_pct ?? 0,
+        rate.notes ?? "",
+      ],
+    );
+  }
+  return listRates(ownerId);
+}
+
+async function seedRates(ownerId: string): Promise<void> {
+  const existing = await sql<{ c: string | number }>("select count(*) as c from production_rates where owner_id = $1", [ownerId]);
+  if (Number(existing[0]?.c ?? 0) > 0) return;
+  for (const row of STARTER_RATES) {
+    await sql(
+      `insert into production_rates (
+         id, owner_id, activity_key, label, unit, rate_per_day, workers, teams, plant,
+         hours_per_day, days_per_week, site_conditions, accessibility, weather_allowance_pct, notes
+       ) values ($1,$2,$3,$4,$5,$6,1,1,$7,8,5,'','',0,$8)`,
+      [randomUUID(), ownerId, row.activity_key, row.label, row.unit, row.rate_per_day, row.plant, row.notes],
+    );
+  }
+}

@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { DrawingReportView } from "./DrawingReportView";
+import { RatesEditor } from "./RatesEditor";
 import { ReportView } from "./ReportView";
 import type { TenderReviewReport } from "@/modules/document-analysis/types";
+import type { DrawingPlanningReport, ProductionRate } from "@/modules/drawing-planning/types";
 
 type Doc = {
   id: string;
@@ -23,6 +26,9 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
   const [name, setName] = useState("Review");
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [report, setReport] = useState<TenderReviewReport | null>(null);
+  const [drawingReport, setDrawingReport] = useState<DrawingPlanningReport | null>(null);
+  const [rates, setRates] = useState<ProductionRate[]>([]);
+  const [moduleId, setModuleId] = useState<"document-analysis" | "drawing-planning">("document-analysis");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [drag, setDrag] = useState(false);
@@ -37,6 +43,8 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
     setName(data.project.name);
     setDocuments(data.documents);
     setReport(data.report);
+    setDrawingReport(data.drawingReport);
+    setRates(data.rates ?? []);
   }, [projectId]);
 
   useEffect(() => {
@@ -53,27 +61,24 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
     const response = await fetch(`/api/projects/${projectId}/documents`, { method: "POST", body: form });
     const data = await response.json();
     setBusy("");
+    await refresh();
     if (!response.ok) {
       setError(data.detail || data.error || "Upload failed.");
-      return;
     }
-    await refresh();
   }
 
-  async function loadSample() {
+  async function loadSample(kind: "tender" | "drawings") {
     setBusy("Building sample pack");
     setError("");
-    const response = await fetch(`/api/projects/${projectId}/sample`, { method: "POST" });
+    const path = kind === "tender" ? "sample" : "drawings/sample";
+    const response = await fetch(`/api/projects/${projectId}/${path}`, { method: "POST" });
     const data = await response.json();
     setBusy("");
-    if (!response.ok) {
-      setError(data.detail || "Could not load the sample pack.");
-      return;
-    }
     await refresh();
+    if (!response.ok) setError(data.detail || "Could not load the sample pack.");
   }
 
-  async function analyze() {
+  async function analyzeTender() {
     setBusy("Reading documents");
     setError("");
     const response = await fetch(`/api/projects/${projectId}/analyze`, { method: "POST" });
@@ -84,6 +89,19 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
       return;
     }
     setReport(data.report);
+  }
+
+  async function analyzeDrawings() {
+    setBusy("Taking off drawings");
+    setError("");
+    const response = await fetch(`/api/projects/${projectId}/drawings/analyze`, { method: "POST" });
+    const data = await response.json();
+    setBusy("");
+    if (!response.ok) {
+      setError(data.detail || "Take-off failed.");
+      return;
+    }
+    setDrawingReport(data.report);
   }
 
   async function removeDoc(id: string) {
@@ -98,12 +116,23 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
           <Link href="/" className="text-xs uppercase tracking-widest text-moss">All reviews</Link>
           <h1 className="font-serif text-4xl">{name}</h1>
         </div>
-        <button
-          onClick={analyze}
-          disabled={Boolean(busy) || documents.length === 0}
-          className="bg-moss px-5 py-2 text-sm text-paper disabled:opacity-50"
-        >
-          {busy === "Reading documents" ? "Reading…" : "Run tender review"}
+        {moduleId === "document-analysis" ? (
+          <button onClick={analyzeTender} disabled={Boolean(busy) || documents.length === 0} className="bg-moss px-5 py-2 text-sm text-paper disabled:opacity-50">
+            {busy === "Reading documents" ? "Reading…" : "Run tender review"}
+          </button>
+        ) : (
+          <button onClick={analyzeDrawings} disabled={Boolean(busy) || documents.length === 0} className="bg-moss px-5 py-2 text-sm text-paper disabled:opacity-50">
+            {busy === "Taking off drawings" ? "Measuring…" : "Run drawing take-off"}
+          </button>
+        )}
+      </div>
+
+      <div className="no-print flex gap-2 border-b border-rule">
+        <button className={`px-3 py-2 text-sm ${moduleId === "document-analysis" ? "border-b-2 border-moss" : "text-ink/55"}`} onClick={() => setModuleId("document-analysis")}>
+          01 Tender review
+        </button>
+        <button className={`px-3 py-2 text-sm ${moduleId === "drawing-planning" ? "border-b-2 border-moss" : "text-ink/55"}`} onClick={() => setModuleId("drawing-planning")}>
+          02 Drawings & durations
         </button>
       </div>
 
@@ -120,9 +149,9 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
           void upload(e.dataTransfer.files);
         }}
       >
-        <p className="font-medium">Drop PDF, Word and Excel files here</p>
+        <p className="font-medium">Drop PDF, Word, Excel or drawing images</p>
         <p className="mt-1 text-sm text-ink/65">
-          Conditions, contract data, particular conditions, specifications, bills and invitations. Drawings are accepted if they contain text; scanned images without OCR will be flagged.
+          Module 01 reads contracts, specs and bills. Module 02 reads drawings and your production rates. Keep both packs on the same project so quantities can be compared with the BOQ.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <label className="cursor-pointer border border-ink/30 px-3 py-1 text-sm">
@@ -131,15 +160,18 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
               type="file"
               multiple
               className="hidden"
-              accept=".pdf,.docx,.xlsx,.xls,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept=".pdf,.docx,.xlsx,.xls,.txt,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg"
               onChange={(e) => {
                 if (e.target.files) void upload(e.target.files);
                 e.target.value = "";
               }}
             />
           </label>
-          <button type="button" onClick={loadSample} className="border border-ink/30 px-3 py-1 text-sm" disabled={Boolean(busy)}>
+          <button type="button" onClick={() => void loadSample("tender")} className="border border-ink/30 px-3 py-1 text-sm" disabled={Boolean(busy)}>
             Load sample tender pack
+          </button>
+          <button type="button" onClick={() => void loadSample("drawings")} className="border border-ink/30 px-3 py-1 text-sm" disabled={Boolean(busy)}>
+            Load sample drawings
           </button>
         </div>
       </section>
@@ -175,9 +207,18 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         )}
       </section>
 
-      {report ? <ReportView report={report} /> : (
+      {moduleId === "drawing-planning" ? (
+        <>
+          <RatesEditor rates={rates} onChange={setRates} />
+          {drawingReport ? <DrawingReportView report={drawingReport} projectId={projectId} /> : (
+            <p className="text-sm text-ink/55">Run the drawing take-off after drawings (and the BOQ, if you have it) are on this project. Durations stay blank until a rate exists.</p>
+          )}
+        </>
+      ) : report ? (
+        <ReportView report={report} />
+      ) : (
         <p className="text-sm text-ink/55">
-          The structured report appears here after you run the review. Findings stay blank unless a quote exists in a file.
+          The structured tender report appears here after you run Module 01. Findings stay blank unless a quote exists in a file.
         </p>
       )}
     </div>

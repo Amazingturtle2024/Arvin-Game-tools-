@@ -24,7 +24,9 @@ export async function parseDocument(input: {
   let sheetNames: string[] = [];
 
   if (kind === "unsupported") {
-    warnings.push("This file type is not parsed. Upload PDF, Word (.docx) or Excel (.xlsx/.xls).");
+    warnings.push("This file type is not parsed. Upload PDF, Word, Excel, or a drawing image (PNG, JPEG, WebP).");
+  } else if (kind === "image") {
+    warnings.push("Raster images have no selectable text. Dimensions are not read from pixels unless a model transcription is enabled. They are not used as measured quantities on their own.");
   } else if (kind === "pdf") {
     const pdf = await parsePdf(input.bytes);
     units = pdf.units;
@@ -65,6 +67,9 @@ export function detectKind(filename: string, mime: string, bytes: Buffer): Docum
   const name = filename.toLowerCase();
   const head = bytes.subarray(0, 8).toString("latin1");
   if (head.startsWith("%PDF")) return "pdf";
+  if (head.startsWith("\x89PNG") || head.startsWith("\xff\xd8") || mime.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(name)) {
+    return "image";
+  }
   if (name.endsWith(".txt") || mime.startsWith("text/plain")) return "txt";
   if (head.startsWith("PK")) {
     if (name.endsWith(".docx")) return "docx";
@@ -88,13 +93,26 @@ async function parsePdf(bytes: Buffer): Promise<{ units: TextUnit[]; pageCount: 
   if (pageCount > MAX_PAGES) {
     warnings.push(`Only the first ${MAX_PAGES} of ${pageCount} pages were read.`);
   }
-  const units: TextUnit[] = pages.slice(0, MAX_PAGES).map((text, i) => ({
-    text: normalizeSpace(String(text || "")),
-    page: i + 1,
-    sheet: null,
-    row: null,
-    heading: null,
-  })).filter((u) => u.text.length > 0);
+  const units: TextUnit[] = [];
+  pages.slice(0, MAX_PAGES).forEach((raw, i) => {
+    const pageNo = i + 1;
+    const text = normalizeSpace(String(raw || ""));
+    if (!text) return;
+    const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length <= 1) {
+      units.push({ text, page: pageNo, sheet: null, row: null, heading: null });
+      return;
+    }
+    lines.forEach((line, li) => {
+      units.push({
+        text: line,
+        page: pageNo,
+        sheet: null,
+        row: li + 1,
+        heading: isHeading(line) ? line.slice(0, 160) : null,
+      });
+    });
+  });
   if (units.length === 0) {
     warnings.push("No extractable text was found. Scanned drawings need OCR before they can be reviewed.");
   }
@@ -183,7 +201,7 @@ export function locationLabel(unit: Pick<TextUnit, "page" | "sheet" | "row" | "h
   const parts: string[] = [];
   if (unit.page != null) parts.push(`p.${unit.page}`);
   if (unit.sheet) parts.push(`sheet ${unit.sheet}`);
-  if (unit.row != null && unit.page == null) parts.push(`¶ ${unit.row}`);
+  if (unit.row != null) parts.push(unit.page != null ? `line ${unit.row}` : `¶ ${unit.row}`);
   if (unit.heading && unit.heading !== unit.sheet) parts.push(unit.heading.slice(0, 80));
   if (clause) parts.push(`cl. ${clause}`);
   return parts.join(" · ") || "location not stated";

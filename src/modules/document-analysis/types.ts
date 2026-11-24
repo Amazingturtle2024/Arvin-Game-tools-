@@ -1,4 +1,4 @@
-export type DocumentKind = "pdf" | "docx" | "xlsx" | "txt" | "unsupported";
+export type DocumentKind = "pdf" | "docx" | "xlsx" | "txt" | "image" | "unsupported";
 
 export type DocumentRole =
   | "contract_conditions"

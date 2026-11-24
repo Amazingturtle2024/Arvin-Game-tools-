@@ -211,7 +211,7 @@ const PATTERNS: Pattern[] = [
     field: "spec_section",
     label: "Specification section",
     category: "specifications",
-    re: /^(section\s+[A-Z0-9]+[^\n]{0,80}|works information [A-Z0-9.]+[^\n]{0,80})/i,
+    re: /\b(section\s+[A-Z0-9]+[^\n]{0,80}|works information\s+[A-Z0-9.][^\n]{0,80})/i,
   },
   {
     field: "z_clause",
@@ -438,10 +438,43 @@ function dedupeFacts(facts: ExtractedFact[]): ExtractedFact[] {
   return out;
 }
 
-export function quoteExistsInDocuments(quote: string, docs: ParsedDocument[]): boolean {
+export function locateQuote(quote: string, docs: ParsedDocument[]): { doc: ParsedDocument; unit: TextUnit } | null {
   const needle = collapse(quote);
-  if (needle.length < 12) return false;
-  return docs.some((doc) => collapse(doc.fullText).includes(needle));
+  if (needle.length < 12) return null;
+  for (const doc of docs) {
+    for (const unit of doc.units) {
+      if (collapse(unit.text).includes(needle)) return { doc, unit };
+    }
+  }
+  for (const doc of docs) {
+    if (!collapse(doc.fullText).includes(needle)) continue;
+    const unit = bestUnitForQuote(needle, doc.units) ?? doc.units[0];
+    if (unit) return { doc, unit };
+  }
+  return null;
+}
+
+function bestUnitForQuote(needle: string, units: TextUnit[]): TextUnit | null {
+  const words = needle.split(" ").filter(Boolean);
+  let best: TextUnit | null = null;
+  let bestScore = 0;
+  for (const unit of units) {
+    const hay = collapse(unit.text);
+    for (let n = Math.min(words.length, 14); n >= 3; n--) {
+      for (let i = 0; i + n <= words.length; i++) {
+        const chunk = words.slice(i, i + n).join(" ");
+        if (chunk.length >= 8 && hay.includes(chunk) && n > bestScore) {
+          best = unit;
+          bestScore = n;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+export function quoteExistsInDocuments(quote: string, docs: ParsedDocument[]): boolean {
+  return locateQuote(quote, docs) !== null;
 }
 
 function collapse(text: string): string {

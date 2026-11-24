@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { sql } from "./db";
 import { analyzeDocuments, MAX_FILE_BYTES, parseDocument } from "@/modules/document-analysis";
 import type { ParsedDocument, TenderReviewReport } from "@/modules/document-analysis/types";
+import { analyzeDrawings } from "@/modules/drawing-planning";
+import type { DrawingPlanningReport } from "@/modules/drawing-planning/types";
+import { listRates } from "./rates";
 
 export type ProjectRow = {
   id: string;
@@ -64,22 +67,45 @@ export async function addDocument(input: {
   mime: string;
   bytes: Buffer;
 }): Promise<DocumentRow> {
-  if (input.bytes.length > MAX_FILE_BYTES) {
-    throw new Error(`File exceeds the ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB limit.`);
-  }
-  const id = randomUUID();
-  const parsed = await parseDocument({
-    documentId: id,
-    filename: input.filename,
-    mime: input.mime,
-    bytes: input.bytes,
-  });
-  const rows = await sql<DocumentRow>(
-    "insert into documents (id, project_id, filename, mime, byte_size, bytes, parsed) values ($1, $2, $3, $4, $5, $6, $7::jsonb) returning id, project_id, filename, mime, byte_size, created_at::text, parsed",
-    [id, input.projectId, input.filename.slice(0, 200), input.mime.slice(0, 120), input.bytes.length, input.bytes, JSON.stringify(parsed)],
-  );
-  await sql("update projects set updated_at = now(), status = 'documents' where id = $1", [input.projectId]);
+  const rows = await addDocuments(input.projectId, [input]);
   return rows[0];
+}
+
+export async function addDocuments(
+  projectId: string,
+  files: Array<{ filename: string; mime: string; bytes: Buffer }>,
+): Promise<DocumentRow[]> {
+  const prepared = [];
+  for (const file of files) {
+    if (file.bytes.length > MAX_FILE_BYTES) {
+      throw new Error(`File exceeds the ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB limit.`);
+    }
+    const id = randomUUID();
+    const parsed = await parseDocument({
+      documentId: id,
+      filename: file.filename,
+      mime: file.mime,
+      bytes: file.bytes,
+    });
+    prepared.push({ id, file, parsed });
+  }
+  const saved: DocumentRow[] = [];
+  try {
+    for (const item of prepared) {
+      const rows = await sql<DocumentRow>(
+        "insert into documents (id, project_id, filename, mime, byte_size, bytes, parsed) values ($1, $2, $3, $4, $5, $6, $7::jsonb) returning id, project_id, filename, mime, byte_size, created_at::text, parsed",
+        [item.id, projectId, item.file.filename.slice(0, 200), item.file.mime.slice(0, 120), item.file.bytes.length, item.file.bytes, JSON.stringify(item.parsed)],
+      );
+      saved.push(rows[0]);
+    }
+  } catch (error) {
+    for (const row of saved) {
+      await sql("delete from documents where id = $1", [row.id]);
+    }
+    throw error;
+  }
+  await sql("update projects set updated_at = now(), status = 'documents' where id = $1", [projectId]);
+  return saved;
 }
 
 export async function deleteDocument(ownerId: string, projectId: string, docId: string): Promise<boolean> {
@@ -123,5 +149,41 @@ export async function runAnalysis(ownerId: string, projectId: string): Promise<T
     [randomUUID(), projectId, JSON.stringify(report)],
   );
   await sql("update projects set updated_at = now(), status = 'reviewed' where id = $1", [projectId]);
+  return report;
+}
+
+export async function latestDrawingReport(projectId: string): Promise<DrawingPlanningReport | null> {
+  const rows = await sql<{ report: DrawingPlanningReport }>(
+    "select report from drawing_runs where project_id = $1 order by created_at desc limit 1",
+    [projectId],
+  );
+  return rows[0]?.report ?? null;
+}
+
+export async function runDrawingAnalysis(ownerId: string, projectId: string): Promise<DrawingPlanningReport> {
+  const project = await getProject(ownerId, projectId);
+  if (!project) throw new Error("Project not found");
+  const files = await sql<{ id: string; filename: string; mime: string; bytes: Buffer | Uint8Array }>(
+    "select id, filename, mime, bytes from documents where project_id = $1",
+    [projectId],
+  );
+  if (files.length === 0) throw new Error("Upload drawings or a tender pack before running take-off.");
+  const rates = await listRates(ownerId);
+  const report = await analyzeDrawings({
+    projectId,
+    projectName: project.name,
+    files: files.map((file) => ({
+      documentId: file.id,
+      filename: file.filename,
+      mime: file.mime,
+      bytes: Buffer.from(file.bytes),
+    })),
+    rates,
+  });
+  await sql(
+    "insert into drawing_runs (id, project_id, report) values ($1, $2, $3::jsonb)",
+    [randomUUID(), projectId, JSON.stringify(report)],
+  );
+  await sql("update projects set updated_at = now(), status = 'quantified' where id = $1", [projectId]);
   return report;
 }

@@ -1,5 +1,6 @@
 import { jsonError, jsonOk, ownerKey, requireViewer } from "@/lib/auth";
-import { deleteProject, getProject, latestReport, listDocuments } from "@/lib/projects";
+import { deleteProject, getProject, latestDrawingReport, latestReport, listDocuments } from "@/lib/projects";
+import { listRates } from "@/lib/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,12 @@ export async function GET(
   if (!project) return jsonError(404, "not_found");
   const documents = await listDocuments(id);
   const report = await latestReport(id);
+  const drawingReport = await latestDrawingReport(id);
+  const rates = await listRates(ownerKey(viewer));
   return jsonOk({
     project,
+    rates,
+    drawingReport,
     documents: documents.map((d) => ({
       id: d.id,
       filename: d.filename,
