@@ -249,6 +249,22 @@ describe("module 2 drawing take-off", () => {
       [{ itemNo: "C.5", description: "Backfill to excavations", unit: "m3", quantity: 8, rate: null, amount: null, section: "Measured works", source: { ...src, row: 3, quote: "backfill to excavations" } }],
     );
     expect(fill.find((r) => r.boqItem?.includes("C.5"))?.drawingItem).toBe("Backfill");
+
+    const excavated = compareBoq(
+      [
+        qty("excavation", "Pads", "m3", 10),
+        qty("backfill", "Backfill", "m3", 8),
+      ],
+      [{ itemNo: "C.6", description: "Backfill excavated material", unit: "m3", quantity: 8, rate: null, amount: null, section: "Measured works", source: { ...src, row: 4, quote: "backfill excavated material" } }],
+    );
+    expect(excavated.find((r) => r.boqItem?.includes("C.6"))?.drawingItem).toBe("Backfill");
+
+    const pipeline = compareBoq(
+      [qty("pipe", "150 mm pipe", "m", 210)],
+      [{ itemNo: "R.3", description: "150mm pipeline", unit: "m", quantity: 210, rate: null, amount: null, section: "Measured works", source: { ...src, row: 5, quote: "150mm pipeline" } }],
+    );
+    expect(pipeline.find((r) => r.boqItem?.includes("R.3"))?.drawingItem).toBe("150 mm pipe");
+    expect(pipeline.find((r) => r.boqItem?.includes("R.3"))?.status).toBe("match");
   });
 
   it("blocks duration when hours per day are zero", () => {

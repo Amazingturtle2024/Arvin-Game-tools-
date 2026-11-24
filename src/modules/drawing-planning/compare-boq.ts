@@ -7,7 +7,7 @@ const KEYWORDS: Array<{ key: string; words: string[] }> = [
   { key: "formwork", words: ["formwork", "shutter"] },
   { key: "reinforcement", words: ["reinforcement", "rebar"] },
   { key: "brickwork", words: ["brick"] },
-  { key: "pipe", words: ["drain", "pipe", "sewer"] },
+  { key: "pipe", words: ["drain", "pipe", "pipeline", "sewer"] },
   { key: "backfill", words: ["backfill"] },
   { key: "compaction", words: ["compact"] },
   { key: "roadworks", words: ["road", "pavement", "asphalt", "sub-base", "wearing"] },
@@ -16,6 +16,7 @@ const KEYWORDS: Array<{ key: string; words: string[] }> = [
 
 const STOP = new Set(["the", "and", "for", "with", "from", "into", "onto", "dia", "nr", "item"]);
 const INCLUDED_IN_PRIMARY = new Set(["backfill", "compaction"]);
+const LOCATION_MODIFIER = new Set(["roadworks"]);
 
 export function compareBoq(takeoff: QuantityTakeoff[], boq: BoqLine[]): BoqVariance[] {
   const items = takeoff.filter((t) => t.complete && t.quantity > 0);
@@ -118,7 +119,14 @@ function primaryActivity(hits: Array<{ key: string; start: number; end: number }
   if (!hits.length) return null;
   const first = hits[0];
   const next = hits.find((h) => h.start >= first.end);
-  if (next && desc.slice(first.end, next.start).trim() === "") return next.key;
+  if (
+    next &&
+    next.key !== first.key &&
+    LOCATION_MODIFIER.has(first.key) &&
+    desc.slice(first.end, next.start).trim() === ""
+  ) {
+    return next.key;
+  }
   return first.key;
 }
 
@@ -143,7 +151,7 @@ function tokenMatchesStem(token: string, stem: string): boolean {
   const s = stem.replace(/-/g, "");
   if (!t.startsWith(s)) return false;
   if (s.length >= 5) return true;
-  return /^(s|age|ages|work|works|way|ways)?$/.test(t.slice(s.length));
+  return /^(s|age|ages|work|works|way|ways|line|lines)?$/.test(t.slice(s.length));
 }
 
 function isActivityToken(token: string, activityKey: string, words: string[]): boolean {
